@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 	"math"
-	"os"
+	"miaoyinniangzi/internal/privatefs"
 	"path/filepath"
 	"reflect"
 	"sync"
@@ -88,12 +88,8 @@ func TestReopenPreservesAllState(t *testing.T) {
 	if err != nil || len(favorites) != 1 || favorites[0].ID != "a" {
 		t.Fatalf("remove: %+v %v", favorites, err)
 	}
-	info, err := os.Stat(filepath.Join(dir, "miaoyin.sqlite3"))
-	if err != nil {
+	if err := privatefs.Check(filepath.Join(dir, "miaoyin.sqlite3"), 0600); err != nil {
 		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Fatalf("permissions: %v", info.Mode())
 	}
 }
 func TestRejectInvalidStateWithoutOverwriting(t *testing.T) {

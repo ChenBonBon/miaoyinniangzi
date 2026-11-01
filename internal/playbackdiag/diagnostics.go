@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"miaoyinniangzi/internal/privatefs"
 	"os"
 	"sync"
 	"time"
@@ -238,7 +239,7 @@ func (d *Diagnostics) write(e entry) {
 		return
 	}
 	directory, err := os.Lstat(d.directory)
-	if err != nil || !directory.IsDir() || directory.Mode()&os.ModeSymlink != 0 || os.Chmod(d.directory, 0700) != nil {
+	if err != nil || !directory.IsDir() || directory.Mode()&os.ModeSymlink != 0 || privatefs.Protect(d.directory, 0700) != nil {
 		return
 	}
 	root, err := os.OpenRoot(d.directory)
@@ -272,7 +273,7 @@ func (d *Diagnostics) write(e entry) {
 	}
 	defer file.Close()
 	current, err := file.Stat()
-	if err != nil || !current.Mode().IsRegular() || info != nil && !os.SameFile(info, current) || file.Chmod(0600) != nil {
+	if err != nil || !current.Mode().IsRegular() || info != nil && !os.SameFile(info, current) || privatefs.ProtectFile(file, 0600) != nil {
 		return
 	}
 	_, _ = file.Write(line)

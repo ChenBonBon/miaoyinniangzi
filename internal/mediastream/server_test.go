@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"miaoyinniangzi/internal/privatefs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -99,7 +100,7 @@ func TestFLACTemporaryCacheIsPrivateAndRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0600 || info.Size() == 0 {
+	if err != nil || privatefs.Check(path, 0600) != nil || info.Size() == 0 {
 		t.Fatal("cache is not private")
 	}
 	cleanup()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"miaoyinniangzi/internal/testfs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -226,10 +227,10 @@ func TestDownloadMetadataDoesNotPersistURLAndSymlinkIsRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer root.Close()
-	if err = os.Symlink(outside, filepath.Join(dir, "bad.part")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = regular(root, "bad.part", true, true); err == nil {
-		t.Fatal("symlink accepted")
-	}
+	t.Run("symlink", func(t *testing.T) {
+		testfs.Symlink(t, outside, filepath.Join(dir, "bad.part"))
+		if _, err := regular(root, "bad.part", true, true); err == nil {
+			t.Fatal("symlink accepted")
+		}
+	})
 }

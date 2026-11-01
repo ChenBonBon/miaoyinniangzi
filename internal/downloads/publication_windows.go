@@ -36,7 +36,7 @@ func renameNoReplace(dir *os.File, source, target string, expected fileIdentity)
 	attributes := windows.OBJECT_ATTRIBUTES{Length: uint32(unsafe.Sizeof(windows.OBJECT_ATTRIBUTES{})), RootDirectory: windows.Handle(dir.Fd()), ObjectName: name, Attributes: windows.OBJ_CASE_INSENSITIVE}
 	var handle windows.Handle
 	var status windows.IO_STATUS_BLOCK
-	err = windows.NtCreateFile(&handle, windows.DELETE|windows.SYNCHRONIZE|windows.FILE_READ_ATTRIBUTES, &attributes, &status, nil, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_OPEN, windows.FILE_OPEN_REPARSE_POINT|windows.FILE_NON_DIRECTORY_FILE|windows.FILE_SYNCHRONOUS_IO_NONALERT|windows.FILE_OPEN_FOR_BACKUP_INTENT, 0, 0)
+	err = windows.NtCreateFile(&handle, windows.DELETE|windows.SYNCHRONIZE|windows.FILE_READ_ATTRIBUTES|windows.FILE_WRITE_ATTRIBUTES, &attributes, &status, nil, 0, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, windows.FILE_OPEN, windows.FILE_OPEN_REPARSE_POINT|windows.FILE_NON_DIRECTORY_FILE|windows.FILE_SYNCHRONOUS_IO_NONALERT|windows.FILE_OPEN_FOR_BACKUP_INTENT, 0, 0)
 	if err != nil {
 		return ntError(err)
 	}
@@ -64,7 +64,31 @@ func renameNoReplace(dir *os.File, source, target string, expected fileIdentity)
 	err = windows.NtSetInformationFile(handle, &status, (*byte)(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), windows.FileRenameInformation)
 	runtime.KeepAlive(name)
 	runtime.KeepAlive(dir)
-	return ntError(err)
+	if err != nil {
+		return ntError(err)
+	}
+	return restorePublicationIdentity(handle, expected)
+}
+
+// NTFS filename tunneling can replace the creation time during an exclusive
+// rename into a recently deleted name. Restore only that metadata through the
+// still-open, proven source handle; never relax the persisted identity check.
+func restorePublicationIdentity(handle windows.Handle, expected fileIdentity) error {
+	actual, err := identityOfHandle(handle)
+	if err != nil || actual.Volume != expected.Volume || actual.File != expected.File {
+		return ErrPublishedChanged
+	}
+	// Set explicitly even if this handle still reports its pre-rename metadata;
+	// a newly opened target handle must observe exactly the persisted birth time.
+	created := windows.NsecToFiletime(expected.Created)
+	if windows.SetFileTime(handle, &created, nil, nil) != nil {
+		return ErrPublishedChanged
+	}
+	actual, err = identityOfHandle(handle)
+	if err != nil || actual != expected {
+		return ErrPublishedChanged
+	}
+	return nil
 }
 func syncPublishedDirectory(*os.File) error { return nil }
 func platformStorageFailure(err error) error {

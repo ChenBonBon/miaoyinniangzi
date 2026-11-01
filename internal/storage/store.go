@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"miaoyinniangzi/internal/privatefs"
 	_ "modernc.org/sqlite"
 )
 
@@ -66,7 +67,7 @@ func Open(directory, downloadDirectory string) (*Store, error) {
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(directory, 0700); err != nil {
+	if err := privatefs.Protect(directory, 0700); err != nil {
 		return nil, err
 	}
 	path := filepath.Join(directory, "miaoyin.sqlite3")
@@ -77,7 +78,7 @@ func Open(directory, downloadDirectory string) (*Store, error) {
 	if err := file.Close(); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(path, 0600); err != nil {
+	if err := privatefs.Protect(path, 0600); err != nil {
 		return nil, err
 	}
 	db, err := sql.Open("sqlite", path)

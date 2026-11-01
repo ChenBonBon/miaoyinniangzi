@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -237,7 +238,29 @@ func TestProvidedSourceResolveOffline(t *testing.T) {
 	t.Log("provided source: offline FLAC handler passed")
 }
 
+func TestUnsupportedPlatformSourceWorkersRemainFailClosed(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("unsupported-platform contract")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	network := &fakeNetwork{}
+	worker := &ProcessInspector{Executable: executable, Network: network}
+	result, resolveErr := worker.Resolve(context.Background(), []byte(resolveFixture), ResolveInput{SongMID: "Song1"}, "flac")
+	if result.URL != "" || len(network.calls) != 0 || (resolveErr == nil && result.Error == "") {
+		t.Fatal("unsupported platform executed source or exposed media")
+	}
+	if sandboxWorker() == nil {
+		t.Fatal("missing sandbox accepted")
+	}
+}
+
 func TestResolveWorkerControlledNetworkAndMapping(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires implemented macOS source-worker sandbox")
+	}
 	executable, _ := os.Executable()
 	network := &fakeNetwork{}
 	worker := &ProcessInspector{Executable: executable, Network: network}
@@ -254,6 +277,9 @@ func TestResolveWorkerControlledNetworkAndMapping(t *testing.T) {
 	}
 }
 func TestResolveErrorsAreSanitizedAndNoNetworkRetry(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires implemented macOS source-worker sandbox")
+	}
 	executable, _ := os.Executable()
 	network := &fakeNetwork{fail: true}
 	worker := &ProcessInspector{Executable: executable, Network: network}
@@ -275,6 +301,9 @@ func TestResolveErrorsAreSanitizedAndNoNetworkRetry(t *testing.T) {
 	}
 }
 func TestResolveCancellationAndBusyLoop(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires implemented macOS source-worker sandbox")
+	}
 	executable, _ := os.Executable()
 	worker := &ProcessInspector{Executable: executable, Network: &fakeNetwork{}}
 	script := `lx.on('request',()=>{while(true){}});lx.send('inited',{status:true,sources:{tx:{actions:['musicUrl'],qualitys:['flac']}}});`

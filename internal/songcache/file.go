@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"miaoyinniangzi/internal/mediastream"
+	"miaoyinniangzi/internal/privatefs"
 )
 
 const chunkSize int64 = 256 * 1024
@@ -47,6 +48,10 @@ func newDisk(ctx context.Context, raw mediastream.Fetcher, remote string, info m
 	}
 	directory, err := os.MkdirTemp("", "miaoyin-song-cache-")
 	if err != nil {
+		return nil, ErrCache
+	}
+	if err := privatefs.Protect(directory, 0700); err != nil {
+		os.RemoveAll(directory)
 		return nil, ErrCache
 	}
 	if err := os.WriteFile(directory+"/owner.pid", []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {

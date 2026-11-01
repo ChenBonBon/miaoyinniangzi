@@ -3,6 +3,7 @@ package music
 import (
 	"encoding/json"
 	"errors"
+	"miaoyinniangzi/internal/privatefs"
 	"os"
 	"sync"
 	"time"
@@ -80,7 +81,7 @@ func (d *Diagnostics) record(event diagnostic, started time.Time, err error) {
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return
 	}
-	if os.Chmod(d.directory, 0700) != nil {
+	if privatefs.Protect(d.directory, 0700) != nil {
 		return
 	}
 	root, err := os.OpenRoot(d.directory)
@@ -117,7 +118,7 @@ func (d *Diagnostics) record(event diagnostic, started time.Time, err error) {
 	if err != nil || !current.Mode().IsRegular() || info != nil && !os.SameFile(info, current) {
 		return
 	}
-	if file.Chmod(0600) != nil {
+	if privatefs.ProtectFile(file, 0600) != nil {
 		return
 	}
 	_, _ = file.Write(line)

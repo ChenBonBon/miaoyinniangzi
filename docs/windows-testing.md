@@ -74,6 +74,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 
 有错误请提供：Windows 版本、`go version` / `bun --version`、失败步骤、完整的非敏感报错、DLL 是否齐全。不要提供音源脚本、密钥、签名音乐地址、数据库或含识别性音乐信息的日志。
 
+## Windows 测试的平台边界
+
+私有数据库、缓存和日志在 Windows 使用当前用户与 SYSTEM 的 DACL，测试直接检查 ACL，不以 `os.FileMode` 的 POSIX 权限位判断 Windows 隐私。普通用户缺少符号链接权限时，只跳过相应子测试；可选启用 Windows 开发者模式后重跑，无需以管理员身份运行应用。打开的 `os.Root` 在 Windows 上可由系统禁止目录重命名，测试把这种明确的 sharing violation 作为更强的目录固定保护验证，其他错误仍然失败。
+
+音源工作进程的正向集成测试仅在已实现沙箱的 macOS 上运行；Windows 运行拒绝执行、不得发起音源网络请求的负向测试，不绕过沙箱。下载发布针对 NTFS 复用已删除文件名可能产生的创建时间隧道效应，通过已验证的原文件句柄恢复创建时间，再完整复核卷、文件 ID 与创建时间；不忽略身份字段，也不按哈希推断未知文件归属。若重命名后、身份时间恢复前中断，恢复仍保守拒绝不匹配目标，不覆盖文件。
+
 ## 4. 依赖与构建限制
 
 依赖固定在 `tools/windows-dependencies.json`，不自动追踪 latest。7zr 官方地址为固定文件名，因此另固定其 26.04 字节 SHA-256，站点更新后校验会失败，不能静默执行新版。缓存校验失败应删除报错对应的 `build/deps/windows-x64/` 文件后重新下载，不跳过哈希检查。

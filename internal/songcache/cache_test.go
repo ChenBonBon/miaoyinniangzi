@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"miaoyinniangzi/internal/privatefs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -110,7 +111,7 @@ func TestCompleteCurrentCacheAndFrameAlignedDemotion(t *testing.T) {
 	if stat.Size() != prefix {
 		t.Fatal("neighbor metadata read regrew discarded tail")
 	}
-	if runtimeMode, err := os.Stat(disk.directory); err != nil || runtimeMode.Mode().Perm() != 0700 {
+	if err := privatefs.Check(disk.directory, 0700); err != nil {
 		t.Fatal("cache directory not private")
 	}
 }

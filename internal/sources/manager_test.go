@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"miaoyinniangzi/internal/testfs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,10 +116,13 @@ func TestRejectInvalidFiles(t *testing.T) {
 	files := []string{script(t, dir, "empty.js", " "), script(t, dir, "wrong.txt", "const x=1"), script(t, dir, "binary.js", string([]byte{0xff, 0x00})), script(t, dir, "large.js", strings.Repeat("x", MaxScriptSize+1))}
 	valid := script(t, dir, "valid.js", "const x=1")
 	link := filepath.Join(dir, "link.js")
-	if err := os.Symlink(valid, link); err != nil {
-		t.Fatal(err)
-	}
-	files = append(files, link, filepath.Join(dir, "missing.js"), dir)
+	t.Run("symlink", func(t *testing.T) {
+		testfs.Symlink(t, valid, link)
+		if _, err := m.Import(context.Background(), link); err == nil {
+			t.Fatal("symlink accepted")
+		}
+	})
+	files = append(files, filepath.Join(dir, "missing.js"), dir)
 	for _, file := range files {
 		if _, err := m.Import(context.Background(), file); err == nil {
 			t.Fatalf("accepted invalid file %s", filepath.Base(file))

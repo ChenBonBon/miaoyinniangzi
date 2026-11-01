@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"miaoyinniangzi/internal/storage"
+	"miaoyinniangzi/internal/testfs"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -145,6 +146,10 @@ func TestPinnedDirectoryReplacementIsRejected(t *testing.T) {
 	defer root.Close()
 	moved := dir + "-old"
 	if err = os.Rename(dir, moved); err != nil {
+		if testfs.RenamePinnedDenied(err) && directoryStillMounted(root, dir) {
+			t.Log("Windows prevents renaming an open pinned directory")
+			return
+		}
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(moved)

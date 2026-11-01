@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"miaoyinniangzi/internal/privatefs"
+	"miaoyinniangzi/internal/testfs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -131,13 +133,12 @@ func TestDiagnosticsRotationPermissionsAndConcurrentWrites(t *testing.T) {
 	if err != nil || len(files) != 2 {
 		t.Fatalf("rotation: %v %v", files, err)
 	}
-	info, _ := os.Stat(dir)
-	if info.Mode().Perm() != 0700 {
+	if privatefs.Check(dir, 0700) != nil {
 		t.Fatal("directory is not private")
 	}
 	for _, entry := range files {
 		info, _ := entry.Info()
-		if info.Size() > diagnosticLimit || info.Mode().Perm() != 0600 {
+		if info.Size() > diagnosticLimit || privatefs.Check(filepath.Join(dir, entry.Name()), 0600) != nil {
 			t.Fatal("invalid log bounds or permissions")
 		}
 		data, _ := os.ReadFile(filepath.Join(dir, entry.Name()))
@@ -152,17 +153,17 @@ func TestDiagnosticsRefuseSymlinkAndNeverLogRawErrors(t *testing.T) {
 	dir := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside")
 	os.WriteFile(outside, []byte("preserved"), 0600)
-	if err := os.Symlink(outside, filepath.Join(dir, "qq-metadata.jsonl")); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("symlink", func(t *testing.T) {
+		testfs.Symlink(t, outside, filepath.Join(dir, "qq-metadata.jsonl"))
+		defer os.Remove(filepath.Join(dir, "qq-metadata.jsonl"))
+		NewDiagnostics(dir).record(diagnostic{Operation: "search"}, time.Now(), fmt.Errorf("SECRET-URL"))
+		data, _ := os.ReadFile(outside)
+		if string(data) != "preserved" {
+			t.Fatal("followed log symlink")
+		}
+	})
 	NewDiagnostics(dir).record(diagnostic{Operation: "search"}, time.Now(), fmt.Errorf("SECRET-URL"))
-	data, _ := os.ReadFile(outside)
-	if string(data) != "preserved" {
-		t.Fatal("followed log symlink")
-	}
-	os.Remove(filepath.Join(dir, "qq-metadata.jsonl"))
-	NewDiagnostics(dir).record(diagnostic{Operation: "search"}, time.Now(), fmt.Errorf("SECRET-URL"))
-	data, _ = os.ReadFile(filepath.Join(dir, "qq-metadata.jsonl"))
+	data, _ := os.ReadFile(filepath.Join(dir, "qq-metadata.jsonl"))
 	if strings.Contains(string(data), "SECRET") {
 		t.Fatal("raw error leaked")
 	}

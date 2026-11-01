@@ -3,6 +3,7 @@ package mediastream
 import (
 	"context"
 	"io"
+	"miaoyinniangzi/internal/privatefs"
 	"os"
 	"path/filepath"
 )
@@ -26,6 +27,10 @@ func (s *Server) CacheFLAC(ctx context.Context, remote string) (string, func(), 
 		return "", nil, ErrMedia
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
+	if err := privatefs.Protect(dir, 0700); err != nil {
+		cleanup()
+		return "", nil, ErrMedia
+	}
 	path := filepath.Join(dir, "audio.flac")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
