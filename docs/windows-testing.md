@@ -1,6 +1,6 @@
 # Windows x64 构建与验收
 
-当前目标是开发验收便携包，不是公开发行安装包。**Windows 音源沙箱尚未实现，音源脚本执行保持安全阻断；不能据此宣布真实音源解析、播放、下载已可用。** 现阶段可验证构建、DLL 加载、界面、QQ 元数据、收藏/队列持久化和 Windows DPAPI 等基础能力。
+当前目标是开发验收便携包，不是公开发行安装包。基础构建与界面已由用户在 Windows 验证。新增 AppContainer/LPAC + Job 音源 worker 已接入开发构建，**原生隔离和真实源全链路仍待实机通过**；先按 `WINDOWS-SANDBOX.md`（源码中为 [Windows 沙箱](windows-sandbox.md)）运行原生测试，再导入个人音源。隔离初始化失败始终拒绝执行，不降级。
 
 ## 1. 准备环境
 
@@ -54,13 +54,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 3. 检查两个 DLL 的 SHA-256、PE x64 类型、必要导出及普通/延迟导入依赖闭包；拒绝缺失的非系统依赖。
 4. 在 Windows 原生调用 libmpv client API 进行 Warmup；此检查不打开设备、不解析媒体、不播放音频。
 5. 使用 Bun 冻结锁安装、类型/单元测试及前端构建，再运行固定 Wails 版本构建 EXE。跳过 Wails 内建 npm 前端步骤，不需要 Node。
-6. 输出新的 `build/bin/windows-x64-时间-随机后缀/` 及同名 ZIP，包含 EXE、**两个 DLL**、依赖锁、哈希清单、版权文本及本说明。每次输出新目录，不清除旧验收包或 Mac 构建。
+6. 编译独立的 `miaoyin-source-worker.exe`，使用该实际辅助程序验证离线检查和伪造网络 broker 协议，不访问真实服务；失败立即停止。
+7. 输出新的 `build/bin/windows-x64-时间-随机后缀/` 及同名 ZIP，包含主 EXE、辅助 EXE、**两个 DLL**、依赖锁、哈希清单、版权文本和验收说明。两个 EXE 都做 PE x64/系统依赖检查。每次输出新目录，不清除旧验收包或 Mac 构建。
 
 只构建、不运行可加 `-AllowMissingWebView2`，但启动前仍须安装 Runtime。需要 Wails 环境报告时可运行 `go run github.com/wailsapp/wails/v2/cmd/wails@v2.17.0 doctor`；其 Node/npm 提示不等于本项目 Bun 构建流程必须使用 Node。
 
 ## 3. 运行与反馈
 
-解压完整 ZIP，运行目录中的 `miaoyinniangzi.exe`。**不要只复制 EXE，也不要把 DLL 放进 System32。** 同目录应有 `libmpv-2.dll` 和 `vulkan-1.dll`。应用目录可以整体移动；下载目录仍按设置决定。
+解压完整 ZIP，运行目录中的 `miaoyinniangzi.exe`。**不要只复制 EXE，也不要把 DLL 放进 System32。** 同目录应有 `miaoyin-source-worker.exe`、`libmpv-2.dll` 和 `vulkan-1.dll`。应用目录可以整体移动；下载目录仍按设置决定。
 
 优先检查：
 
@@ -70,7 +71,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 - `-Tests` 下 Windows DPAPI、文件 ACL/重解析点、SQLite、原子落盘等测试结果；编译成功不能替代运行成功。
 - Windows 普通关闭应真正退出，不套用 macOS 的关闭隐藏行为。
 
-暂不把以下失败判为完整功能回归：音源导入后的执行检查、音源激活/解析，以及依赖该解析的真实音乐播放和下载。原因是 Windows 源工作进程沙箱尚待开发，`sandbox_other.go` 会明确拒绝，不能通过移除沙箱检查来“修好”。原生 libmpv Warmup 成功也不代表可听播放、切歌、缓存或输出设备已经验收。
+新增沙箱先通过 Windows 原生探针与辅助 EXE 冒烟，再验收个人源的离线检查、激活、解析及真实播放/缓存/下载。原生 libmpv Warmup 或交叉编译成功不代表隔离、可听播放、切歌或输出设备已经验收；不得删除安全检查来“修好”测试。
 
 有错误请提供：Windows 版本、`go version` / `bun --version`、失败步骤、完整的非敏感报错、DLL 是否齐全。不要提供音源脚本、密钥、签名音乐地址、数据库或含识别性音乐信息的日志。
 
@@ -78,7 +79,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 
 私有数据库、缓存和日志在 Windows 使用当前用户与 SYSTEM 的 DACL，测试直接检查 ACL，不以 `os.FileMode` 的 POSIX 权限位判断 Windows 隐私。普通用户缺少符号链接权限时，只跳过相应子测试；可选启用 Windows 开发者模式后重跑，无需以管理员身份运行应用。打开的 `os.Root` 在 Windows 上可由系统禁止目录重命名，测试把这种明确的 sharing violation 作为更强的目录固定保护验证，其他错误仍然失败。
 
-音源工作进程的正向集成测试仅在已实现沙箱的 macOS 上运行；Windows 运行拒绝执行、不得发起音源网络请求的负向测试，不绕过沙箱。下载发布针对 NTFS 复用已删除文件名可能产生的创建时间隧道效应，通过已验证的原文件句柄恢复创建时间，再完整复核卷、文件 ID 与创建时间；不忽略身份字段，也不按哈希推断未知文件归属。若重命名后、身份时间恢复前中断，恢复仍保守拒绝不匹配目标，不覆盖文件。
+macOS 和 Windows 均运行工作进程正向协议测试；Windows 额外运行原生越权探针和无容器直接调用必须拒绝的测试，不绕过沙箱。下载发布针对 NTFS 复用已删除文件名可能产生的创建时间隧道效应，通过已验证的原文件句柄恢复创建时间，再完整复核卷、文件 ID 与创建时间；不忽略身份字段，也不按哈希推断未知文件归属。若重命名后、身份时间恢复前中断，恢复仍保守拒绝不匹配目标，不覆盖文件。
 
 ## 4. 依赖与构建限制
 
@@ -91,4 +92,4 @@ go run ./tools/windows_build verify
 go run ./tools/windows_build native
 ```
 
-本地环境只做了跨平台编译/PE 和哈希核验时，不算 Windows 实机验收。公开分发前还须补齐 Windows 沙箱、实际音频/下载测试、应用许可证、全部第三方许可与 GPL 对应源码、签名及安装包。详见 `THIRD-PARTY-WINDOWS.md`。
+本地环境只做了跨平台编译/PE 和哈希核验时，不算 Windows 实机验收。公开分发前还须完成 Windows 沙箱原生验收、实际音频/下载测试、应用许可证、全部第三方许可与 GPL 对应源码、签名及安装包。详见 `THIRD-PARTY-WINDOWS.md`。

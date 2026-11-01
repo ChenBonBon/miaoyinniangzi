@@ -239,7 +239,7 @@ func TestProvidedSourceResolveOffline(t *testing.T) {
 }
 
 func TestUnsupportedPlatformSourceWorkersRemainFailClosed(t *testing.T) {
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		t.Skip("unsupported-platform contract")
 	}
 	executable, err := os.Executable()
@@ -258,8 +258,8 @@ func TestUnsupportedPlatformSourceWorkersRemainFailClosed(t *testing.T) {
 }
 
 func TestResolveWorkerControlledNetworkAndMapping(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("requires implemented macOS source-worker sandbox")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("requires implemented source-worker sandbox")
 	}
 	executable, _ := os.Executable()
 	network := &fakeNetwork{}
@@ -277,8 +277,8 @@ func TestResolveWorkerControlledNetworkAndMapping(t *testing.T) {
 	}
 }
 func TestResolveErrorsAreSanitizedAndNoNetworkRetry(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("requires implemented macOS source-worker sandbox")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("requires implemented source-worker sandbox")
 	}
 	executable, _ := os.Executable()
 	network := &fakeNetwork{fail: true}
@@ -301,8 +301,8 @@ func TestResolveErrorsAreSanitizedAndNoNetworkRetry(t *testing.T) {
 	}
 }
 func TestResolveCancellationAndBusyLoop(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("requires implemented macOS source-worker sandbox")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("requires implemented source-worker sandbox")
 	}
 	executable, _ := os.Executable()
 	worker := &ProcessInspector{Executable: executable, Network: &fakeNetwork{}}

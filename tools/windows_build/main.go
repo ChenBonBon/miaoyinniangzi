@@ -22,7 +22,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return errors.New("expected prepare, verify, native or package")
+		return errors.New("expected prepare, verify, native, sandbox or package")
 	}
 	command := os.Args[1]
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
@@ -74,6 +74,14 @@ func run() error {
 		}
 		data, _ := json.MarshalIndent(report, "", "  ")
 		fmt.Println(string(data))
+	case "sandbox":
+		if *exe == "" {
+			return errors.New("sandbox requires --exe application executable")
+		}
+		if err := sandboxSmoke(*exe); err != nil {
+			return err
+		}
+		fmt.Println("Packaged source worker: offline inspection and broker protocol passed (no network)")
 	case "package":
 		if *exe == "" || *output == "" {
 			return errors.New("package requires --exe and --out")

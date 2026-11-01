@@ -12,9 +12,9 @@
 
 ## 进程和安全
 
-主应用从 SQLite 读取密文，用 Keychain 密钥解密，脚本只通过匿名 stdin 管道发送给同一二进制的 `--miaoyin-source-worker` 分支。该分支位于 Wails、数据库及 Keychain 初始化之前。密钥不传给辅助进程，脚本不写入参数、环境变量或临时文件。
+主应用从 SQLite 读取密文，用 Keychain（macOS）或 DPAPI（Windows）保护的密钥解密，脚本只通过匿名 stdin 管道发送给 `--miaoyin-source-worker` 分支。macOS 使用同一二进制；Windows 使用相邻的最小 Go 辅助 EXE，不加载 Wails、SQLite、凭据存储或播放器。该分支位于 Wails、数据库及 Keychain 初始化之前。密钥不传给辅助进程，脚本不写入参数、环境变量或临时文件。
 
-辅助进程在加载脚本前：
+macOS 辅助进程在加载脚本前：
 
 1. 应用 macOS Seatbelt 默认拒绝策略（只开放 sysctl-read）。
 2. 禁止 core dump 和文件写入，限制 CPU 时间、文件描述符数量。
@@ -27,11 +27,17 @@ stdout 只接受不超过 8KB 的固定 JSON 报告，校验所有结果字段�
 
 **平台限制：** Apple 已弃用 `sandbox_init`，当前 macOS/Xcode 环境测试可用，并会产生编译警告。限制设置失败时拒绝检查，绝不在主进程或无沙箱模式下回退。正式发行前应迁移/评估签名后的 XPC + App Sandbox 辅助服务，并在目标 macOS 版本验收；当前不是对未来系统兼容性或绝对防逃逸的保证。
 
+## Windows 路径
+
+Windows 使用创建时 AppContainer/LPAC（零网络 capabilities）+ Job list、暂停启动后核验实际 image/令牌/Job 再恢复、三个标准句柄白名单、最小环境及只读程序 staging；worker 在读脚本前再次自检。内存以 Job 提交内存硬限制（256MiB）和父进程 RSS 监控（192MiB）共同约束，单进程、2 秒用户 CPU、禁止子进程、完整 UI 限制及 kill-on-job-close。无安全降级或普通进程回退。独立的 Windows EngineVersion 要求旧检查状态重检，不自动启用。
+
+实现已接入，但 Windows 原生测试仍待用户运行，不把交叉编译当作安全验收。完整边界、目录 ACL、原生越权/父退出探针、实际辅助 EXE 冒烟及剩余限制见 [Windows 沙箱](windows-sandbox.md)。
+
 ## 真实解析
 
 搜索结果中的「解析」按钮通过 `ResolveSong(song, requestID)` 发起解析，使用当前启用音源及已保存的播放音质偏好，与下载音质独立；`CancelSongResolution(requestID)` 只取消当前匹配的解析，不影响歌曲搜索与输入提示。当前为解析验收入口，不播放或下载。
 
-主进程在管理锁内读取当前音源快照、从 Keychain 取得密钥并解密，随后释放锁再联网。脚本经匿名管道发送给同一二进制的 `--miaoyin-source-resolver` 分支，该分支同样在 Wails、数据库、Keychain 初始化前进入 Seatbelt 沙箱。每个音质尝试使用短生命周期进程，明文缓冲尽力清理，不写入文件；Go/JS 内存副本不保证可逐一擦除。
+主进程在管理锁内读取当前音源快照、从 Keychain 取得密钥并解密，随后释放锁再联网。脚本经匿名管道发送给同一二进制的 `--miaoyin-source-resolver` 分支，macOS 分支同样在 Wails、数据库、Keychain 初始化前进入 Seatbelt 沙箱；Windows 的最小辅助程序在创建时进入 LPAC/Job，并在读脚本前再次核验隔离配置。每个音质尝试使用短生命周期进程，明文缓冲尽力清理，不写入文件；Go/JS 内存副本不保证可逐一擦除。
 
 - 只调用 `musicUrl`、`source=tx`；白名单投影歌曲 MID、数字 ID、media MID、歌曲/歌手/专辑名，不传入封面 URL、任意前端地址或数据库内容。
 - 支持 `lx.on/send/request`、Promise、有限定时器与静默 console；`lx.utils` 仍不是完整工具集。网络 callback 返回 `statusCode/body/headers`，JSON 正文自动解码；支持 GET/POST、字符串/JSON body、受限字符串 headers。

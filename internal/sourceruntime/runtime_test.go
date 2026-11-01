@@ -14,6 +14,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "--miaoyin-sandbox-broker-test" {
+		os.Exit(windowsBrokerMain())
+	}
+	if len(os.Args) > 2 && os.Args[1] == WorkerFlag && os.Args[2] == "--native-windows-probe" {
+		os.Exit(windowsProbeMain())
+	}
 	if len(os.Args) > 1 && os.Args[1] == WorkerFlag {
 		if len(os.Args) > 2 && os.Args[2] == "--sandbox-probe" {
 			if sandboxWorker() != nil {
@@ -75,13 +81,14 @@ func TestInfiniteLoopIsInterrupted(t *testing.T) {
 	}
 }
 func TestIsolatedWorkerRoundTrip(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS sandbox required")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("implemented OS sandbox required")
 	}
-	inspector, err := NewInspector()
+	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
+	inspector := &ProcessInspector{Executable: executable}
 	report, err := inspector.Inspect(context.Background(), []byte(validScript))
 	if err != nil {
 		t.Fatal(err)
@@ -91,13 +98,14 @@ func TestIsolatedWorkerRoundTrip(t *testing.T) {
 	}
 }
 func TestWorkerCancellation(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS sandbox required")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		t.Skip("implemented OS sandbox required")
 	}
-	inspector, err := NewInspector()
+	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
+	inspector := &ProcessInspector{Executable: executable}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	if _, err := inspector.Inspect(ctx, []byte(`for(;;){}`)); err == nil {

@@ -92,6 +92,8 @@ PCM 使用 `ao=pcm` 导出并通过已知 chirp 的过零点估算实际内容�
 
 ## 3. Windows 的 Seatbelt 替代方案
 
+后续实现已接入独立 Go helper、AppContainer/LPAC、创建时 Job、句柄白名单和原生越权探针；Windows 实机安全验收仍待通过。当前细节与限制见 [Windows 沙箱](windows-sandbox.md)，下文保留初轮调研方案。
+
 Windows 没有同名 Seatbelt。建议仅把不可信音源 worker 放进 **AppContainer + Job Object**，主程序作为受控 broker，复用现有 JSONL、VM 限制及网络策略。不是把整个 Wails 主程序直接放进 AppContainer。
 
 建议启动序列：

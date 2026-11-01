@@ -10,12 +10,10 @@ import (
 	"io"
 	"miaoyinniangzi/internal/sourcenetwork"
 	"os"
-	"os/exec"
 	"time"
 )
 
 const WorkerFlag = "--miaoyin-source-worker"
-const EngineVersion = "lx-inspect-v1"
 const maxScriptSize = 1024 * 1024
 const maxResidentBytes = 192 * 1024 * 1024
 
@@ -36,7 +34,7 @@ type workerRequest struct {
 }
 
 func NewInspector() (*ProcessInspector, error) {
-	path, err := os.Executable()
+	path, err := workerExecutable()
 	if err != nil {
 		return nil, errors.New("无法定位音源辅助进程")
 	}
@@ -64,18 +62,32 @@ func (p *ProcessInspector) Inspect(ctx context.Context, script []byte) (Report, 
 	defer clear(payload)
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, p.Executable, WorkerFlag)
-	cmd.Env = []string{"GOMEMLIMIT=64MiB", "GOGC=50"}
-	cmd.Dir = "/"
-	cmd.Stdin = bytes.NewReader(payload)
-	var output boundedBuffer
-	cmd.Stdout = &output
-	cmd.Stderr = io.Discard
-	if err := cmd.Start(); err != nil {
+	worker, err := startWorker(ctx, p.Executable, WorkerFlag)
+	if err != nil {
+		if ctx.Err() != nil {
+			return Report{}, errors.New("音源校验超时或已取消")
+		}
 		return Report{}, errors.New("无法启动音源隔离进程")
 	}
+	defer worker.close()
+	var output boundedBuffer
 	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
+	go func() {
+		_, writeErr := worker.input.Write(payload)
+		worker.input.Close()
+		_, readErr := io.Copy(&output, worker.output)
+		if writeErr != nil || readErr != nil {
+			worker.kill()
+		}
+		waitErr := worker.wait()
+		if writeErr != nil {
+			done <- writeErr
+		} else if readErr != nil {
+			done <- readErr
+		} else {
+			done <- waitErr
+		}
+	}()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	failures := 0
@@ -103,18 +115,18 @@ func (p *ProcessInspector) Inspect(ctx context.Context, script []byte) (Report, 
 			}
 			return report, nil
 		case <-ctx.Done():
-			_ = cmd.Process.Kill()
+			worker.kill()
 			<-done
 			return Report{}, errors.New("音源校验超时或已取消")
 		case <-ticker.C:
-			size, err := residentBytes(cmd.Process.Pid)
+			size, err := residentBytes(worker.pid)
 			if err != nil {
 				failures++
 			} else {
 				failures = 0
 			}
 			if size > maxResidentBytes || failures >= 5 {
-				_ = cmd.Process.Kill()
+				worker.kill()
 				<-done
 				return Report{}, errors.New("音源隔离进程超出资源限制或无法安全监控")
 			}

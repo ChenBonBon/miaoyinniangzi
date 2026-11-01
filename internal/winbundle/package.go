@@ -38,20 +38,23 @@ func Package(repo, exe, destination string, lock Lock) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	report, err := InspectPE(exe, false, nil)
-	if err != nil {
-		return "", err
-	}
-	allowed := map[string]bool{"libmpv-2.dll": true, "vulkan-1.dll": true}
+	helper := filepath.Join(filepath.Dir(exe), "miaoyin-source-worker.exe")
+	allowed := map[string]bool{}
 	for _, name := range lock.SystemDLLs {
 		allowed[strings.ToLower(name)] = true
 	}
-	for _, name := range report.Imports {
-		if !allowed[name] {
-			return "", fmt.Errorf("unbundled application import: %s", name)
+	for name, path := range map[string]string{"miaoyinniangzi.exe": exe, "miaoyin-source-worker.exe": helper} {
+		report, inspectErr := InspectPE(path, false, nil)
+		if inspectErr != nil {
+			return "", inspectErr
 		}
+		for _, library := range report.Imports {
+			if !allowed[library] {
+				return "", fmt.Errorf("unbundled executable import: %s", library)
+			}
+		}
+		reports[name] = report
 	}
-	reports["miaoyinniangzi.exe"] = report
 	if err = os.MkdirAll(parent, 0700); err != nil {
 		return "", err
 	}
@@ -61,9 +64,10 @@ func Package(repo, exe, destination string, lock Lock) (string, error) {
 	}
 	defer os.RemoveAll(stage)
 	copies := map[string]string{
-		"miaoyinniangzi.exe": exe, "libmpv-2.dll": filepath.Join(dependencies, "libmpv-2.dll"), "vulkan-1.dll": filepath.Join(dependencies, "vulkan-1.dll"),
+		"miaoyinniangzi.exe": exe, "miaoyin-source-worker.exe": helper, "libmpv-2.dll": filepath.Join(dependencies, "libmpv-2.dll"), "vulkan-1.dll": filepath.Join(dependencies, "vulkan-1.dll"),
 		"VulkanRT-License.txt": filepath.Join(dependencies, "VulkanRT-License.txt"), "windows-dependencies.json": filepath.Join(repo, "tools", "windows-dependencies.json"),
 		"mpv-Copyright.txt": filepath.Join(repo, "docs", "third-party", "windows", "mpv-Copyright.txt"), "mpv-LICENSE-GPL.txt": filepath.Join(repo, "docs", "third-party", "windows", "mpv-LICENSE-GPL.txt"),
+		"WINDOWS-SANDBOX.md": filepath.Join(repo, "docs", "windows-sandbox.md"),
 		"WINDOWS-TESTING.md": filepath.Join(repo, "docs", "windows-testing.md"), "THIRD-PARTY-WINDOWS.md": filepath.Join(repo, "docs", "third-party", "windows.md"),
 	}
 	for target, source := range copies {

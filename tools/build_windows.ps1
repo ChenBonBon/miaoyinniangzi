@@ -44,7 +44,7 @@ try {
         if (-not $AllowMissingWebView2) { throw 'WebView2 Runtime not detected. Install Microsoft.EdgeWebView2Runtime with winget, then rerun. Use -AllowMissingWebView2 only to build without running.' }
         Write-Warning 'WebView2 is missing. The built app cannot run until it is installed.'
     } else { Write-Host "WebView2 Runtime: $webview" }
-    Write-Warning 'Development acceptance build only. Windows source-worker sandbox is not implemented; source-script execution remains blocked.'
+    Write-Warning 'Development acceptance build only. Run Windows native sandbox tests before testing a real source; isolation never falls back to an ordinary process.'
     Invoke-Checked 'go' @('run', './tools/windows_build', 'prepare')
     Invoke-Checked 'go' @('run', './tools/windows_build', 'native')
     Push-Location -LiteralPath (Join-Path $root 'frontend')
@@ -62,11 +62,13 @@ try {
         $env:MIAOYIN_MPV_LIBRARY = $null
     }
     Invoke-Checked 'go' @('run', 'github.com/wailsapp/wails/v2/cmd/wails@v2.17.0', 'build', '-platform', 'windows/amd64', '-s', '-m', '-webview2', 'error')
+    Invoke-Checked 'go' @('build', '-trimpath', '-ldflags=-s -w', '-o', (Join-Path $root 'build\bin\miaoyin-source-worker.exe'), './tools/source_worker')
+    Invoke-Checked 'go' @('run', './tools/windows_build', 'sandbox', '--exe', (Join-Path $root 'build\bin\miaoyinniangzi.exe'))
     $name = 'windows-x64-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 6)
     $output = Join-Path $root ('build\bin\' + $name)
     Invoke-Checked 'go' @('run', './tools/windows_build', 'package', '--exe', (Join-Path $root 'build\bin\miaoyinniangzi.exe'), '--out', $output)
     Write-Host "Portable folder: $output"
-    Write-Host 'Keep the EXE and both DLLs together. Read WINDOWS-TESTING.md before acceptance.'
+    Write-Host 'Keep both EXEs and both DLLs together. Read WINDOWS-TESTING.md before acceptance.'
 } finally {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') }
     Set-Location -LiteralPath $originalDirectory

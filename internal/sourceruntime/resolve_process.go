@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"time"
 
 	"miaoyinniangzi/internal/sourcenetwork"
@@ -52,24 +51,18 @@ func (p *ProcessInspector) Resolve(ctx context.Context, script []byte, info Reso
 		return Resolution{}, errors.New("无法准备音源解析")
 	}
 	defer clear(payload)
-	cmd := exec.CommandContext(ctx, p.Executable, ResolveWorkerFlag)
-	cmd.Env = []string{"GOMEMLIMIT=64MiB", "GOGC=50"}
-	cmd.Dir = "/"
-	cmd.Stderr = io.Discard
-	input, err := cmd.StdinPipe()
+	worker, err := startWorker(ctx, p.Executable, ResolveWorkerFlag)
 	if err != nil {
-		return Resolution{}, errors.New("无法准备音源解析管道")
-	}
-	output, err := cmd.StdoutPipe()
-	if err != nil {
-		input.Close()
-		return Resolution{}, errors.New("无法准备音源解析管道")
-	}
-	if cmd.Start() != nil {
-		input.Close()
-		output.Close()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return Resolution{}, ErrResolveTimeout
+		}
+		if ctx.Err() != nil {
+			return Resolution{}, ErrResolveCanceled
+		}
 		return Resolution{}, errors.New("无法启动音源隔离进程")
 	}
+	defer worker.close()
+	input, output := worker.input, worker.output
 	type outcome struct {
 		result Resolution
 		err    error
@@ -80,9 +73,9 @@ func (p *ProcessInspector) Resolve(ctx context.Context, script []byte, info Reso
 		input.Close()
 		output.Close()
 		if exchangeErr != nil {
-			_ = cmd.Process.Kill()
+			worker.kill()
 		}
-		waitErr := cmd.Wait()
+		waitErr := worker.wait()
 		if exchangeErr != nil {
 			if errors.Is(exchangeErr, io.EOF) && waitErr != nil {
 				done <- outcome{err: ErrResolveProcess}
@@ -119,21 +112,21 @@ func (p *ProcessInspector) Resolve(ctx context.Context, script []byte, info Reso
 			}
 			return value.result, value.err
 		case <-ctx.Done():
-			_ = cmd.Process.Kill()
+			worker.kill()
 			<-done
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				return Resolution{}, ErrResolveTimeout
 			}
 			return Resolution{}, ErrResolveCanceled
 		case <-ticker.C:
-			size, err := residentBytes(cmd.Process.Pid)
+			size, err := residentBytes(worker.pid)
 			if err != nil {
 				failures++
 			} else {
 				failures = 0
 			}
 			if size > maxResidentBytes || failures >= 5 {
-				_ = cmd.Process.Kill()
+				worker.kill()
 				cancel()
 				<-done
 				return Resolution{}, ErrResolveResources

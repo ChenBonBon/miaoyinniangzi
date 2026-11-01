@@ -33,4 +33,4 @@ libmpv 的静态导入表包含 `vulkan-1.dll`，它不是每台 Windows 都自�
 
 两个原生 DLL 都固定字节校验、x64 类型和导入闭包；未知非系统 DLL 直接阻止打包。运行时 libmpv 仍采用绝对应用相邻路径与 `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32`，不以 PATH 或工作目录搜索替代。系统 API-set 和 Windows 自带 DLL 不从非官方站点补拷贝。
 
-此清单不涵盖全部 Go/前端依赖许可，也不是应用许可证。Windows 音源沙箱、公开发行材料、签名/安装包及完整 Windows 实机验收仍未完成。不得移除沙箱限制来绕过源脚本执行阻断。
+此清单不涵盖全部 Go/前端依赖许可，也不是应用许可证。Windows 音源沙箱实现已接入开发构建，但其原生安全验收、公开发行材料、签名/安装包及完整 Windows 实机验收仍未完成。不得移除沙箱限制来绕过源脚本执行阻断。
