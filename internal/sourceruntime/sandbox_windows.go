@@ -72,16 +72,12 @@ func validateContainerToken(process windows.Handle) error {
 	if state.elevated, err = tokenValue(token, windows.TokenElevation); err != nil {
 		return err
 	}
-	var integrity [256]byte
-	var size uint32
-	if err = windows.GetTokenInformation(token, windows.TokenIntegrityLevel, &integrity[0], uint32(len(integrity)), &size); err != nil {
-		return sandboxFailure("token integrity query", err)
+	integrity, err := queryTokenInfo(token, windows.TokenIntegrityLevel)
+	if err != nil {
+		return err
 	}
-	if size < uint32(unsafe.Sizeof(uintptr(0))) {
-		return sandboxFailure("token integrity size")
-	}
-	label := *(**windows.SID)(unsafe.Pointer(&integrity[0]))
-	if label == nil || !label.IsValid() || label.SubAuthorityCount() == 0 {
+	label, err := integrity.sid()
+	if err != nil || label == nil || label.SubAuthorityCount() == 0 {
 		return sandboxFailure("token integrity SID")
 	}
 	state.integrityRID = label.SubAuthority(uint32(label.SubAuthorityCount() - 1))
@@ -94,27 +90,27 @@ func validateContainerToken(process windows.Handle) error {
 	if state.lpac, err = tokenValue(token, 46); err != nil {
 		return err
 	}
-	var caps [4096]byte
-	if err = windows.GetTokenInformation(token, 30, &caps[0], uint32(len(caps)), &size); err != nil {
-		return sandboxFailure("token capabilities query", err)
+	caps, err := queryTokenInfo(token, 30)
+	if err != nil {
+		return err
 	}
-	if size < 4 {
+	if caps.size < 4 {
 		return sandboxFailure("token capabilities size")
 	}
-	state.capabilities = *(*uint32)(unsafe.Pointer(&caps[0]))
-	var data [4096]byte
-	if err = windows.GetTokenInformation(token, 31, &data[0], uint32(len(data)), &size); err != nil {
-		return sandboxFailure("token package query", err)
+	state.capabilities = *(*uint32)(unsafe.Pointer(&caps.words[0]))
+	data, err := queryTokenInfo(token, 31)
+	if err != nil {
+		return err
 	}
-	if size < uint32(unsafe.Sizeof(uintptr(0))) {
-		return sandboxFailure("token package size")
+	sid, err := data.sid()
+	if err != nil {
+		return err
 	}
-	sid := *(**windows.SID)(unsafe.Pointer(&data[0]))
 	expected, err := deriveContainerSID()
 	if err != nil {
 		return sandboxFailure("token expected SID", err)
 	}
-	state.sidMatches = sid != nil && sid.IsValid() && sid.Equals(expected)
+	state.sidMatches = sid != nil && sid.Equals(expected)
 	runtime.KeepAlive(data)
 	return state.validate()
 }
