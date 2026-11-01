@@ -71,35 +71,35 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 	}()
 	job, err = windows.CreateJobObject(nil, nil)
 	if err != nil {
-		return nil, sandboxFailure("job creation")
+		return nil, sandboxFailure("job creation", err)
 	}
 	limits := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{ProcessMemoryLimit: jobMemoryLimit, JobMemoryLimit: jobMemoryLimit}
 	limits.BasicLimitInformation.LimitFlags = jobFlags
 	limits.BasicLimitInformation.ActiveProcessLimit = 1
 	limits.BasicLimitInformation.PerProcessUserTimeLimit = jobCPUTime
 	if _, err = windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits))); err != nil {
-		return nil, sandboxFailure("job limits")
+		return nil, sandboxFailure("job limits", err)
 	}
 	ui := windows.JOBOBJECT_BASIC_UI_RESTRICTIONS{UIRestrictionsClass: 0xff}
 	if _, err = windows.SetInformationJobObject(job, windows.JobObjectBasicUIRestrictions, uintptr(unsafe.Pointer(&ui)), uint32(unsafe.Sizeof(ui))); err != nil {
-		return nil, sandboxFailure("job UI limits")
+		return nil, sandboxFailure("job UI limits", err)
 	}
 	childIn, parentIn, err := os.Pipe()
 	if err != nil {
-		return nil, sandboxFailure("stdin pipe")
+		return nil, sandboxFailure("stdin pipe", err)
 	}
 	input = parentIn
 	defer childIn.Close()
 	parentOut, childOut, err := os.Pipe()
 	if err != nil {
-		return nil, sandboxFailure("stdout pipe")
+		return nil, sandboxFailure("stdout pipe", err)
 	}
 	output = parentOut
 	defer childOut.Close()
 	nullName, _ := windows.UTF16PtrFromString("NUL")
 	null, err := windows.CreateFile(nullName, windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
 	if err != nil {
-		return nil, sandboxFailure("stderr")
+		return nil, sandboxFailure("stderr", err)
 	}
 	defer windows.CloseHandle(null)
 	original := []windows.Handle{windows.Handle(childIn.Fd()), windows.Handle(childOut.Fd()), null}
@@ -111,14 +111,14 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 	}()
 	for _, handle := range original {
 		var duplicate windows.Handle
-		if windows.DuplicateHandle(windows.CurrentProcess(), handle, windows.CurrentProcess(), &duplicate, 0, true, windows.DUPLICATE_SAME_ACCESS) != nil {
-			return nil, sandboxFailure("handle duplication")
+		if err = windows.DuplicateHandle(windows.CurrentProcess(), handle, windows.CurrentProcess(), &duplicate, 0, true, windows.DUPLICATE_SAME_ACCESS); err != nil {
+			return nil, sandboxFailure("handle duplication", err)
 		}
 		handles = append(handles, duplicate)
 	}
 	attributes, err := windows.NewProcThreadAttributeList(5)
 	if err != nil {
-		return nil, sandboxFailure("process attributes")
+		return nil, sandboxFailure("process attributes", err)
 	}
 	defer attributes.Delete()
 	capabilities := securityCapabilities{SID: sid}
@@ -135,8 +135,8 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 		{attributeAllPackagesPolicy, unsafe.Pointer(&allPackagesPolicy), 4},
 		{windows.PROC_THREAD_ATTRIBUTE_HANDLE_LIST, unsafe.Pointer(&handles[0]), uintptr(len(handles)) * unsafe.Sizeof(handles[0])},
 	} {
-		if attributes.Update(attribute.key, attribute.value, attribute.size) != nil {
-			return nil, sandboxFailure("required process attribute")
+		if err = attributes.Update(attribute.key, attribute.value, attribute.size); err != nil {
+			return nil, sandboxFailure("required process attribute", err)
 		}
 	}
 	startup := windows.StartupInfoEx{ProcThreadAttributeList: attributes.List()}
@@ -163,7 +163,7 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 	runtime.KeepAlive(handles)
 	runtime.KeepAlive(attributes)
 	if err != nil {
-		return nil, sandboxFailure("lowbox creation")
+		return nil, sandboxFailure("lowbox creation", err)
 	}
 	if err = stage.verifyImage(process.Process); err != nil {
 		return nil, err
@@ -184,7 +184,7 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 		return nil, ctx.Err()
 	}
 	if _, err = windows.ResumeThread(process.Thread); err != nil {
-		return nil, sandboxFailure("resume")
+		return nil, sandboxFailure("resume", err)
 	}
 	windows.CloseHandle(process.Thread)
 	process.Thread = 0

@@ -159,6 +159,18 @@ func probePipeImpersonationDenied() bool {
 }
 
 func TestWindowsSandboxNativeBoundaries(t *testing.T) {
+	version := windows.RtlGetVersion()
+	t.Logf("Windows kernel %d.%d build %d; arch=%s", version.MajorVersion, version.MinorVersion, version.BuildNumber, runtime.GOARCH)
+	var parentInJob uint32
+	membership := kernel.NewProc("IsProcessInJob")
+	if membership.Find() != nil {
+		t.Fatal("cannot query parent job membership")
+	}
+	ok, _, _ := membership.Call(uintptr(windows.CurrentProcess()), 0, uintptr(unsafe.Pointer(&parentInJob)))
+	if ok == 0 {
+		t.Fatal("cannot query parent job membership")
+	}
+	t.Logf("parent_in_job=%t", parentInJob != 0)
 	dir := t.TempDir()
 	if err := privatefs.Protect(dir, 0700); err != nil {
 		t.Fatal(err)
@@ -423,6 +435,18 @@ func TestWindowsSandboxParentDeathKillsWorker(t *testing.T) {
 		t.Fatal("test executable staging cleanup failed")
 	}
 }
+func TestWindowsSandboxDiagnosticsKeepOnlyNumericErrorCodes(t *testing.T) {
+	wrapped := &os.PathError{Op: "SECRET_OPERATION", Path: "SECRET_PATH", Err: syscall.Errno(5)}
+	if message := sandboxFailure("lowbox creation", wrapped).Error(); message != "Windows source sandbox: lowbox creation (win32=5)" {
+		t.Fatal("numeric diagnostic missing or raw data leaked")
+	}
+	for _, cause := range []error{nil, errors.New("SECRET_RAW_ERROR")} {
+		if sandboxFailure("lowbox creation", cause).Error() != "Windows source sandbox: lowbox creation" {
+			t.Fatal("raw error text leaked")
+		}
+	}
+}
+
 func TestWindowsWorkerEnvironmentDoesNotInheritCredentials(t *testing.T) {
 	block := workerEnvironment("C:\\Windows")
 	values := strings.Split(string(utf16.Decode(block)), "\x00")

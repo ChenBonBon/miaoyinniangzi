@@ -2,6 +2,7 @@ package sourceruntime
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -207,4 +208,15 @@ func noLoopbackExemption(sid *windows.SID) error {
 
 // The user-facing error deliberately does not include executable paths, scripts,
 // token details, URLs or raw Windows loader messages.
-func sandboxFailure(stage string) error { return errors.New("Windows source sandbox: " + stage) }
+func sandboxFailure(stage string, causes ...error) error {
+	message := "Windows source sandbox: " + stage
+	// Preserve only the machine-readable code, never cause.Error(): Windows
+	// errors can be wrapped in path/command strings and must stay out of logs.
+	if len(causes) > 0 {
+		var code syscall.Errno
+		if errors.As(causes[0], &code) && code != 0 {
+			message += fmt.Sprintf(" (win32=%d)", uint32(code))
+		}
+	}
+	return errors.New(message)
+}
