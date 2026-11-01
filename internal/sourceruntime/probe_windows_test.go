@@ -112,7 +112,7 @@ func windowsProbeMain() int {
 	for _, variable := range os.Environ() {
 		name := strings.SplitN(variable, "=", 2)[0]
 		switch strings.ToUpper(name) {
-		case "GOGC", "GOMEMLIMIT", "GOMAXPROCS", "GOTRACEBACK", "SYSTEMROOT", "TZ", "WINDIR":
+		case "GOGC", "GOMEMLIMIT", "GOMAXPROCS", "GOTRACEBACK", "SYSTEMROOT", "TZ", "WINDIR", "SYSTEMDRIVE", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP":
 		default:
 			clean = false
 		}
@@ -448,14 +448,38 @@ func TestWindowsSandboxDiagnosticsKeepOnlyNumericErrorCodes(t *testing.T) {
 }
 
 func TestWindowsWorkerEnvironmentDoesNotInheritCredentials(t *testing.T) {
-	block := workerEnvironment("C:\\Windows")
+	t.Setenv("MIAOYIN_SECRET", "SYNTHETIC_SECRET")
+	t.Setenv("USERPROFILE", "WRONG_PARENT_PATH")
+	t.Setenv("LOCALAPPDATA", "WRONG_PARENT_PATH")
+	block := workerEnvironment(`C:\Windows`, `C:\Users\Fixture`, `C:\Users\Fixture\AppData\Local`, `C:\Users\Fixture\AppData\Roaming`)
 	values := strings.Split(string(utf16.Decode(block)), "\x00")
-	if len(values) != 9 || values[len(values)-1] != "" || values[len(values)-2] != "" {
+	if len(values) != 15 || values[len(values)-1] != "" || values[len(values)-2] != "" {
 		t.Fatal("environment block is not double-NUL terminated")
 	}
-	for _, value := range values[:7] {
-		if strings.Contains(value, "USER") || strings.Contains(value, "PATH=") || strings.Contains(value, "MIAOYIN_") {
-			t.Fatal("credentials inherited")
+	found := map[string]string{}
+	previous := ""
+	for _, value := range values[:13] {
+		pair := strings.SplitN(value, "=", 2)
+		if len(pair) != 2 {
+			t.Fatal("invalid environment entry")
+		}
+		key := strings.ToUpper(pair[0])
+		if previous > key {
+			t.Fatal("environment block not case-insensitively sorted")
+		}
+		previous = key
+		found[key] = pair[1]
+		if strings.Contains(value, "SYNTHETIC_SECRET") || strings.Contains(value, "WRONG_PARENT_PATH") {
+			t.Fatal("parent environment inherited")
 		}
 	}
+	for _, key := range []string{"USERNAME", "HOME", "PATH", "MIAOYIN_SECRET", "GODEBUG"} {
+		if _, ok := found[key]; ok {
+			t.Fatal("unapproved environment variable")
+		}
+	}
+	if found["USERPROFILE"] != `C:\Users\Fixture` || found["SYSTEMDRIVE"] != "C:" || found["TEMP"] != `C:\Users\Fixture\AppData\Local\Temp` || found["TMP"] != found["TEMP"] {
+		t.Fatal("required Windows paths incorrect")
+	}
+
 }

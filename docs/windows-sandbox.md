@@ -14,7 +14,7 @@ Windows 使用独立的 `miaoyin-source-worker.exe`，只链接 Goja 和受控�
 2. 只在这个专用 profile 的 package/AC 目录设置当前用户、SYSTEM 完全控制和该 SID 只读/执行的 DACL；拒绝未知目录布局或 reparse point，不更改全局 AppData、Packages 或其他应用目录权限。
 3. 使用原生 handle-relative 原子创建私有随机 staging 子目录，ACL 在创建时生效。容器 SID 只读/执行，OWNER RIGHTS 限制隐式 WRITE_DAC；保留不共享删除的目录句柄。只复制公开的辅助 EXE，校验复制前后 SHA-256，固定只读且不共享写/删的文件句柄。正常结束删除副本。
 4. 配置匿名 Job：单进程、2 秒用户 CPU 时间、256MiB 进程/Job 提交内存、kill-on-job-close、禁止 breakaway，完整 UI/剪贴板限制。Go 仍有 64MiB 软内存预算，父进程继续每 10ms 监测 RSS，192MiB 或连续无法监控则终止整个 Job。
-5. `STARTUPINFOEX` 必须同时包含无 capabilities 的 AppContainer、LPAC opt-out、禁止子进程、创建时 Job list、标准输入/输出/NUL 共三个句柄的白名单。环境只含 Go 资源预算、系统目录和 UTC；不继承 HOME、PATH、凭据或开发调试变量。工作目录为系统目录。
+5. `STARTUPINFOEX` 必须同时包含无 capabilities 的 AppContainer、LPAC opt-out、禁止子进程、创建时 Job list、标准输入/输出/NUL 共三个句柄的白名单。环境使用显式白名单：Go 资源预算、系统目录/盘、UTC，以及通过 OS Known Folders 获取的 USERPROFILE、LOCALAPPDATA、APPDATA、TEMP/TMP 路径，供 Windows lowbox/profile 初始化展开。不复制父进程环境，不继承 HOME、PATH、USERNAME、凭据或开发调试变量；传入路径不授予相应文件访问权限，原生私有文件/注册表拒绝测试仍须通过。工作目录为系统目录。
 6. `CREATE_SUSPENDED` 创建，父进程核对实际映射程序的 native image 名与固定文件一致、令牌确为预期 SID 的低完整性、未提权 LPAC、零 capabilities、且属于指定 Job，然后才恢复线程。任一 API、属性或复核失败，终止并回收，不尝试弱化配置重启。
 7. worker 在读取第一字节脚本前再次核对令牌、Job 上限/UI 限制和禁止子进程策略，并要求固定无数据 TCP 探针得到 WSAEACCES，以验证实际网络拒绝；超时、离线或其他错误不算通过。原有 Goja 栈、定时器、墙钟中断、有界 JSON/JSONL、主进程 HTTPS broker 和媒体地址验证保持不变。Job 是资源边界，不能拿它替代 AppContainer 文件/网络边界。
 

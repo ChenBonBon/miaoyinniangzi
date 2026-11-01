@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -151,7 +153,13 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 	if err != nil {
 		return nil, sandboxFailure("system directory")
 	}
-	environment := workerEnvironment(systemRoot)
+	profile, profileErr := windows.KnownFolderPath(windows.FOLDERID_Profile, 0)
+	local, localErr := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, 0)
+	roaming, roamingErr := windows.KnownFolderPath(windows.FOLDERID_RoamingAppData, 0)
+	if profileErr != nil || localErr != nil || roamingErr != nil {
+		return nil, sandboxFailure("known environment directories")
+	}
+	environment := workerEnvironment(systemRoot, profile, local, roaming)
 	current, _ := windows.UTF16PtrFromString(systemRoot + "\\System32")
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -210,8 +218,14 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 		stageCleanup()
 	}}, nil
 }
-func workerEnvironment(root string) []uint16 {
-	values := []string{"GOGC=50", "GOMAXPROCS=2", "GOMEMLIMIT=64MiB", "GOTRACEBACK=none", "SystemRoot=" + root, "TZ=UTC", "WINDIR=" + root}
+func workerEnvironment(root, profile, local, roaming string) []uint16 {
+	// Windows lowbox/profile initialization expands these paths. Supply values
+	// from OS known folders, not the parent's arbitrary environment. Knowing a
+	// path does not grant the lowbox access to it; all ACL/token checks remain.
+	temp := filepath.Join(local, "Temp")
+	values := []string{"GOGC=50", "GOMAXPROCS=2", "GOMEMLIMIT=64MiB", "GOTRACEBACK=none", "SystemRoot=" + root, "TZ=UTC", "WINDIR=" + root,
+		"SystemDrive=" + filepath.VolumeName(root), "USERPROFILE=" + profile, "LOCALAPPDATA=" + local, "APPDATA=" + roaming, "TEMP=" + temp, "TMP=" + temp}
+	sort.Slice(values, func(i, j int) bool { return strings.ToUpper(values[i]) < strings.ToUpper(values[j]) })
 	var result []uint16
 	for _, value := range values {
 		encoded, _ := windows.UTF16FromString(value)
