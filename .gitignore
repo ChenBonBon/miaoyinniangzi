@@ -1,0 +1,13 @@
+.DS_Store
+frontend/node_modules/
+frontend/dist/
+frontend/wailsjs/
+frontend/test-results/
+frontend/playwright-report/
+build/bin/
+build/deps/
+__pycache__/
+.env
+.env.*
+*.local
+/sources/

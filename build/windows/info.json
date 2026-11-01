@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0-dev",
+			"CompanyName": "{{.Info.CompanyName}}",
+			"FileDescription": "{{.Info.ProductName}}",
+			"LegalCopyright": "{{.Info.Copyright}}",
+			"ProductName": "{{.Info.ProductName}}",
+			"Comments": "Windows x64 development acceptance build; source-worker sandbox pending."
+		}
+	}
+}

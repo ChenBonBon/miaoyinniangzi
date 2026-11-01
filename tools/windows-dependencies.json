@@ -1,0 +1,33 @@
+{
+  "architecture": "amd64",
+  "libmpv": {
+    "version": "20261021-git-e471496c56",
+    "url": "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20261021/mpv-dev-x86_64-20261021-git-e471496c56.7z",
+    "sha256": "efc719eff3dc5954b4a5efc800632808bcec01cc9034940dd14e5eb7fe9ea633",
+    "maxBytes": 67108864,
+    "dllSha256": "04e4d27dc385dc18ddd93fbe69c75e635b864f3c6ec53a9122df54c2f7842f4a",
+    "clientApi": "2.6",
+    "source": "https://github.com/mpv-player/mpv/tree/e471496c56"
+  },
+  "extractor": {
+    "version": "7-Zip reduced console 26.04",
+    "url": "https://www.7-zip.org/a/7zr.exe",
+    "sha256": "256feca8e274e5da655e2a284fabafd9f554365eb164862089dacd4e8276d282",
+    "maxBytes": 4194304
+  },
+  "vulkan": {
+    "version": "1.4.363.0",
+    "url": "https://sdk.lunarg.com/sdk/download/1.4.363.0/windows/VulkanRT-X64-1.4.363.0-Components.zip",
+    "sha256": "a25a927aa8b9f0371048f1861cf88ac3b9bc9b1fb332c42d897c8ab32695769a",
+    "maxBytes": 33554432,
+    "dllSha256": "e1fcfc9489beefa6a6d9d11d6c7517f6a2b7f16e0d3fb8f4103bee0210f314a3",
+    "dllEntry": "VulkanRT-X64-1.4.363.0-Components/x64/vulkan-1.dll",
+    "licenseEntry": "VulkanRT-X64-1.4.363.0-Components/VulkanRT-License.txt",
+    "licenseSha256": "404deb98dabf3e54bf9070d59676b31d69a3da2f9f6e56bdf09ad315c04c718c",
+    "source": "https://github.com/KhronosGroup/Vulkan-Loader/tree/vulkan-sdk-1.4.363.0"
+  },
+  "systemDlls": [
+    "advapi32.dll", "avicap32.dll", "avrt.dll", "bcrypt.dll", "bcryptprimitives.dll", "cfgmgr32.dll", "crypt32.dll", "d2d1.dll", "dwrite.dll", "dwmapi.dll", "gdi32.dll", "imm32.dll", "iphlpapi.dll", "kernel32.dll", "normaliz.dll", "ntdll.dll", "ole32.dll", "oleaut32.dll", "opengl32.dll", "secur32.dll", "setupapi.dll", "shcore.dll", "shell32.dll", "shlwapi.dll", "user32.dll", "uxtheme.dll", "version.dll", "winmm.dll", "wldap32.dll", "ws2_32.dll",
+    "api-ms-win-core-path-l1-1-0.dll", "api-ms-win-core-synch-l1-2-0.dll", "api-ms-win-core-winrt-error-l1-1-1.dll", "api-ms-win-core-winrt-l1-1-0.dll", "api-ms-win-crt-convert-l1-1-0.dll", "api-ms-win-crt-environment-l1-1-0.dll", "api-ms-win-crt-filesystem-l1-1-0.dll", "api-ms-win-crt-heap-l1-1-0.dll", "api-ms-win-crt-locale-l1-1-0.dll", "api-ms-win-crt-math-l1-1-0.dll", "api-ms-win-crt-multibyte-l1-1-0.dll", "api-ms-win-crt-private-l1-1-0.dll", "api-ms-win-crt-runtime-l1-1-0.dll", "api-ms-win-crt-stdio-l1-1-0.dll", "api-ms-win-crt-string-l1-1-0.dll", "api-ms-win-crt-time-l1-1-0.dll", "api-ms-win-crt-utility-l1-1-0.dll"
+  ]
+}
