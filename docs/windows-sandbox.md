@@ -38,7 +38,7 @@ go test -count=1 -v ./internal/sourceruntime
 - 真实杀死独立 broker 后，worker 随 Job 自动退出，不依赖 Go defer 或前端退出事件。
 - 离线检查、父进程伪造网络 RPC、取消、异常脱敏及输入输出上限在 Windows 真进程中运行，而不再跳过正向协议测试。
 
-若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中，不输出源脚本、路径或密钥。请保留这些诊断，不以移除 LPAC/Job 来排查。
+若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中；令牌失败时还输出 elevation、完整性 RID、AppContainer/LPAC 标志、capability 数量与预期 SID 是否匹配。只输出数字/布尔状态，不输出 SID 正文、源脚本、路径或密钥。请保留这些诊断，不以移除 LPAC/Job 来排查。
 
 通过后运行完整构建：
 

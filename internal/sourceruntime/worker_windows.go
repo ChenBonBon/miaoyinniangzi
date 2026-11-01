@@ -176,8 +176,8 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 	if err = stage.verifyImage(process.Process); err != nil {
 		return nil, err
 	}
-	if validateContainerToken(process.Process) != nil {
-		return nil, sandboxFailure("child token verification")
+	if err = validateContainerToken(process.Process); err != nil {
+		return nil, err
 	}
 	inJob := uint32(0)
 	isInJob := kernel.NewProc("IsProcessInJob")

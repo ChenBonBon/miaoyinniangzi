@@ -40,57 +40,87 @@ func deriveContainerSID() (*windows.SID, error) {
 }
 func tokenValue(token windows.Token, class uint32) (uint32, error) {
 	var value, size uint32
-	if windows.GetTokenInformation(token, class, (*byte)(unsafe.Pointer(&value)), 4, &size) != nil || size != 4 {
-		return 0, errWindowsSandbox
+	if err := windows.GetTokenInformation(token, class, (*byte)(unsafe.Pointer(&value)), 4, &size); err != nil {
+		return 0, sandboxFailure(fmt.Sprintf("token query class=%d", class), err)
+	}
+	if size != 4 {
+		return 0, sandboxFailure(fmt.Sprintf("token query class=%d bytes=%d", class, size))
 	}
 	return value, nil
 }
+
+type containerTokenState struct {
+	elevated, integrityRID, appContainer, lpac, capabilities uint32
+	integrityAllowed, sidMatches                             bool
+}
+
+func (state containerTokenState) validate() error {
+	if state.elevated == 0 && state.integrityAllowed && (state.integrityRID == 0 || state.integrityRID == 4096) && state.appContainer == 1 && state.lpac == 1 && state.capabilities == 0 && state.sidMatches {
+		return nil
+	}
+	// Numeric security properties only; never include user/package SID strings.
+	return sandboxFailure(fmt.Sprintf("token policy elevated=%d integrity_rid=%d integrity_allowed=%t appcontainer=%d lpac=%d capabilities=%d sid_match=%t", state.elevated, state.integrityRID, state.integrityAllowed, state.appContainer, state.lpac, state.capabilities, state.sidMatches))
+}
 func validateContainerToken(process windows.Handle) error {
 	var token windows.Token
-	if windows.OpenProcessToken(process, windows.TOKEN_QUERY, &token) != nil {
-		return errWindowsSandbox
+	if err := windows.OpenProcessToken(process, windows.TOKEN_QUERY, &token); err != nil {
+		return sandboxFailure("token open", err)
 	}
 	defer token.Close()
-	if elevated, err := tokenValue(token, windows.TokenElevation); err != nil || elevated != 0 {
-		return errWindowsSandbox
+	var state containerTokenState
+	var err error
+	if state.elevated, err = tokenValue(token, windows.TokenElevation); err != nil {
+		return err
 	}
 	var integrity [256]byte
-	var integritySize uint32
-	if windows.GetTokenInformation(token, windows.TokenIntegrityLevel, &integrity[0], uint32(len(integrity)), &integritySize) != nil {
-		return errWindowsSandbox
+	var size uint32
+	if err = windows.GetTokenInformation(token, windows.TokenIntegrityLevel, &integrity[0], uint32(len(integrity)), &size); err != nil {
+		return sandboxFailure("token integrity query", err)
+	}
+	if size < uint32(unsafe.Sizeof(uintptr(0))) {
+		return sandboxFailure("token integrity size")
 	}
 	label := *(**windows.SID)(unsafe.Pointer(&integrity[0]))
-	if label == nil || (label.String() != "S-1-16-4096" && label.String() != "S-1-16-0") {
-		return errWindowsSandbox
+	if label == nil || !label.IsValid() || label.SubAuthorityCount() == 0 {
+		return sandboxFailure("token integrity SID")
 	}
+	state.integrityRID = label.SubAuthority(uint32(label.SubAuthorityCount() - 1))
+	state.integrityAllowed = label.String() == "S-1-16-4096" || label.String() == "S-1-16-0"
 	runtime.KeepAlive(integrity)
-	// TOKEN_INFORMATION_CLASS values from the Windows SDK.
-	for _, class := range []uint32{29, 46} {
-		value, err := tokenValue(token, class)
-		if err != nil || value != 1 {
-			return errWindowsSandbox
-		}
+	// TOKEN_INFORMATION_CLASS values from the Microsoft Windows SDK.
+	if state.appContainer, err = tokenValue(token, 29); err != nil {
+		return err
+	}
+	if state.lpac, err = tokenValue(token, 46); err != nil {
+		return err
 	}
 	var caps [4096]byte
-	var size uint32
-	if windows.GetTokenInformation(token, 30, &caps[0], uint32(len(caps)), &size) != nil || size < 4 || *(*uint32)(unsafe.Pointer(&caps[0])) != 0 {
-		return errWindowsSandbox
+	if err = windows.GetTokenInformation(token, 30, &caps[0], uint32(len(caps)), &size); err != nil {
+		return sandboxFailure("token capabilities query", err)
 	}
+	if size < 4 {
+		return sandboxFailure("token capabilities size")
+	}
+	state.capabilities = *(*uint32)(unsafe.Pointer(&caps[0]))
 	var data [4096]byte
-	if windows.GetTokenInformation(token, 31, &data[0], uint32(len(data)), &size) != nil || size < uint32(unsafe.Sizeof(uintptr(0))) {
-		return errWindowsSandbox
+	if err = windows.GetTokenInformation(token, 31, &data[0], uint32(len(data)), &size); err != nil {
+		return sandboxFailure("token package query", err)
+	}
+	if size < uint32(unsafe.Sizeof(uintptr(0))) {
+		return sandboxFailure("token package size")
 	}
 	sid := *(**windows.SID)(unsafe.Pointer(&data[0]))
 	expected, err := deriveContainerSID()
-	if err != nil || sid == nil || !sid.Equals(expected) {
-		return errWindowsSandbox
+	if err != nil {
+		return sandboxFailure("token expected SID", err)
 	}
+	state.sidMatches = sid != nil && sid.IsValid() && sid.Equals(expected)
 	runtime.KeepAlive(data)
-	return nil
+	return state.validate()
 }
 func sandboxWorker() error {
-	if validateContainerToken(windows.CurrentProcess()) != nil {
-		return sandboxFailure("worker token")
+	if err := validateContainerToken(windows.CurrentProcess()); err != nil {
+		return err
 	}
 	var limits windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
 	if windows.QueryInformationJobObject(0, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits)), nil) != nil {

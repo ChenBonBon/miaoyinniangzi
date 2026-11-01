@@ -236,7 +236,7 @@ func TestWindowsSandboxNativeBoundaries(t *testing.T) {
 		<-done
 		t.Fatal("native sandbox probe timed out")
 	}
-	if strings.HasPrefix(result.Failure, "Windows source sandbox: worker ") {
+	if strings.HasPrefix(result.Failure, "Windows source sandbox: worker ") || strings.HasPrefix(result.Failure, "Windows source sandbox: token ") {
 		t.Fatal(result.Failure)
 	}
 	if err != nil || writeErr != nil {
@@ -435,6 +435,33 @@ func TestWindowsSandboxParentDeathKillsWorker(t *testing.T) {
 		t.Fatal("test executable staging cleanup failed")
 	}
 }
+func TestWindowsContainerTokenPolicyRemainsStrict(t *testing.T) {
+	good := containerTokenState{integrityRID: 4096, integrityAllowed: true, appContainer: 1, lpac: 1, sidMatches: true}
+	if good.validate() != nil {
+		t.Fatal("valid token properties rejected")
+	}
+	cases := []struct {
+		name   string
+		change func(*containerTokenState)
+	}{
+		{"elevated", func(s *containerTokenState) { s.elevated = 1 }},
+		{"integrity", func(s *containerTokenState) { s.integrityAllowed = false; s.integrityRID = 8192 }},
+		{"appcontainer", func(s *containerTokenState) { s.appContainer = 0 }},
+		{"lpac", func(s *containerTokenState) { s.lpac = 0 }},
+		{"capabilities", func(s *containerTokenState) { s.capabilities = 1 }},
+		{"sid", func(s *containerTokenState) { s.sidMatches = false }},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			state := good
+			item.change(&state)
+			if state.validate() == nil {
+				t.Fatal("unsafe token accepted")
+			}
+		})
+	}
+}
+
 func TestWindowsSandboxDiagnosticsKeepOnlyNumericErrorCodes(t *testing.T) {
 	wrapped := &os.PathError{Op: "SECRET_OPERATION", Path: "SECRET_PATH", Err: syscall.Errno(5)}
 	if message := sandboxFailure("lowbox creation", wrapped).Error(); message != "Windows source sandbox: lowbox creation (win32=5)" {
