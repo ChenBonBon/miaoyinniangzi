@@ -2,6 +2,7 @@ package sourceruntime
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -203,8 +204,11 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 			return errWindowsSandbox
 		}
 		var code uint32
-		if windows.GetExitCodeProcess(process.Process, &code) != nil || code != 0 {
-			return errWindowsSandbox
+		if err = windows.GetExitCodeProcess(process.Process, &code); err != nil {
+			return sandboxFailure("worker exit query", err)
+		}
+		if code != 0 {
+			return &windowsWorkerExitError{code: code}
 		}
 		return nil
 	}
@@ -218,6 +222,13 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 		stageCleanup()
 	}}, nil
 }
+
+type windowsWorkerExitError struct{ code uint32 }
+
+func (err *windowsWorkerExitError) Error() string {
+	return fmt.Sprintf("Windows source sandbox: worker exit code=0x%08x", err.code)
+}
+
 func workerEnvironment(root, profile, local, roaming string) []uint16 {
 	// Windows lowbox/profile initialization expands these paths. Supply values
 	// from OS known folders, not the parent's arbitrary environment. Knowing a

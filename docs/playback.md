@@ -99,7 +99,7 @@ Keychain 首次预读仍可能在启动时授权。原生授权调用无法强�
 - 常规 Go race/vet、漏洞扫描、前端类型/单元测试和 93 条 Playwright 用例通过；浏览器测试只验证桥接/交互，不再声称浏览器音频解码代表 libmpv。
 - `internal/mpvaudio` 假客户端测试：输入限制、取消、失败清理、精确 seek 事件顺序、末端暂停/EOF/销毁。真实 smoke 在 6 秒合成 FLAC、320K、128K 上通过静音 CoreAudio 的暂停末端/播放中跳转、自然 EOF 与单曲循环控制。
 - 显式 `MIAOYIN_MPV_SMOKE=1`、`MIAOYIN_MPV_LIBRARY` 可运行设备 smoke；额外 `MIAOYIN_MPV_MP3_TEST_DIR` 指向含 `320k.mp3`、`128k.mp3` 合成素材的目录。
-- `MIAOYIN_LIVE_MPV_SEEK=1` + `MIAOYIN_SOURCE_TEST_PATH` + `MIAOYIN_MPV_LIBRARY` 运行 `TestProvidedLibmpvSeekLive`：真实《偷心》《可惜没如果》三个普通音质经父进程代理，中点、98%、99.9%、向后及播放中跳转确认均已分别通过。期间曾出现 QQ 搜索及音源解析暂时失败，显式单项重跑通过；没有增加生产自动重试/换源。会消耗真实源额度/流量，默认不运行，不输出敏感数据。
+- `MIAOYIN_LIVE_MPV_SEEK=1` + `MIAOYIN_SOURCE_TEST_PATH` + `MIAOYIN_MPV_LIBRARY` 以 `go test -tags source_live` 运行 `TestProvidedLibmpvSeekLive`：真实《偷心》《可惜没如果》三个普通音质经父进程代理，中点、98%、99.9%、向后及播放中跳转确认均已分别通过。期间曾出现 QQ 搜索及音源解析暂时失败，显式单项重跑通过；没有增加生产自动重试/换源。会消耗真实源额度/流量，默认不运行，不输出敏感数据。
 - `tools/probe_libmpv.py` 用已知 chirp 验证指定起点解码后的实际 PCM，并另测运行时状态/设备。二者分开，不把它们误称为“运行时 seek 后扬声器输出已被采集验证”。细节见 [跨平台调研](cross-platform-research.md)。
 
 - 三槽合成/真实音源测试、并发及容量验证见 [缓存说明](cache-plan.md)。

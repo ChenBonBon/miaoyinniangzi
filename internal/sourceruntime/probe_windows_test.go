@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -33,18 +34,32 @@ type windowsProbeRequest struct {
 	CPU                   bool
 }
 type windowsProbeResult struct {
+	Stage                                                                                                                                                                                                       string
+	Ready                                                                                                                                                                                                       bool
 	Failure                                                                                                                                                                                                     string
 	FileReadDenied, FileWriteDenied, LoopbackDenied, InternetDenied, ChildDenied, ParentDenied, EnvironmentClean, JobMemoryEnforced, StagingWriteDenied, ACLChangeDenied, RegistryIsolated, ImpersonationDenied bool
 }
 
+func windowsProbeStage(stage string) error {
+	return json.NewEncoder(os.Stdout).Encode(struct{ Stage string }{stage})
+}
 func windowsProbeMain() int {
+	if windowsProbeStage("probe_entry") != nil {
+		return 101
+	}
 	if err := sandboxWorker(); err != nil {
 		_ = json.NewEncoder(os.Stdout).Encode(windowsProbeResult{Failure: err.Error()})
 		return 0
 	}
+	if windowsProbeStage("sandbox_ready") != nil {
+		return 101
+	}
 	var request windowsProbeRequest
 	if json.NewDecoder(io.LimitReader(os.Stdin, 8192)).Decode(&request) != nil {
 		return 3
+	}
+	if windowsProbeStage("request_read") != nil {
+		return 101
 	}
 	if request.Hang {
 		if json.NewEncoder(os.Stdout).Encode(struct{ Ready bool }{true}) != nil {
@@ -128,6 +143,49 @@ func windowsProbeMain() int {
 		return 5
 	}
 	return 0
+}
+func readWindowsProbeResult(decoder *json.Decoder, target *windowsProbeResult) (string, error) {
+	stage := "before_entry"
+	for count := 0; count < 16; count++ {
+		var frame windowsProbeResult
+		if err := decoder.Decode(&frame); err != nil {
+			return stage, err
+		}
+		if frame.Stage == "" {
+			*target = frame
+			return stage, nil
+		}
+		switch frame.Stage {
+		case "probe_entry", "sandbox_ready", "request_read":
+			stage = frame.Stage
+		default:
+			return stage, errors.New("invalid probe stage")
+		}
+	}
+	return stage, errors.New("probe frame limit")
+}
+func windowsProbeErrorKind(err error) string {
+	switch {
+	case err == nil:
+		return "none"
+	case errors.Is(err, io.EOF):
+		return "eof"
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return "truncated"
+	}
+	var code syscall.Errno
+	if errors.As(err, &code) {
+		return fmt.Sprintf("win32=%d", uint32(code))
+	}
+	var exit *windowsWorkerExitError
+	if errors.As(err, &exit) {
+		return "worker_exit"
+	}
+	var syntax *json.SyntaxError
+	if errors.As(err, &syntax) {
+		return "invalid_json"
+	}
+	return "other"
 }
 func probePipeImpersonationDenied() bool {
 	runtime.LockOSThread()
@@ -217,30 +275,34 @@ func TestWindowsSandboxNativeBoundaries(t *testing.T) {
 	writeErr := json.NewEncoder(worker.input).Encode(windowsProbeRequest{Read: secret, Write: filepath.Join(dir, "must-not-exist"), Loopback: listener.Addr().String(), Registry: registryPath, Parent: windows.GetCurrentProcessId(), ExtraHandle: uintptr(event)})
 	worker.input.Close()
 	var result windowsProbeResult
-	done := make(chan error, 1)
+	var readErr, waitErr error
+	lastStage := "before_entry"
+	done := make(chan struct{}, 1)
 	go func() {
-		err := json.NewDecoder(io.LimitReader(worker.output, 4096)).Decode(&result)
-		if err != nil {
+		lastStage, readErr = readWindowsProbeResult(json.NewDecoder(io.LimitReader(worker.output, 4096)), &result)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			worker.kill()
 		}
-		waitErr := worker.wait()
-		if err == nil {
-			err = waitErr
-		}
-		done <- err
+		waitErr = worker.wait()
+		done <- struct{}{}
 	}()
 	select {
-	case err = <-done:
+	case <-done:
 	case <-ctx.Done():
 		worker.kill()
 		<-done
 		t.Fatal("native sandbox probe timed out")
 	}
-	if strings.HasPrefix(result.Failure, "Windows source sandbox: worker ") || strings.HasPrefix(result.Failure, "Windows source sandbox: token ") {
+	if strings.HasPrefix(result.Failure, "Windows source sandbox: ") {
 		t.Fatal(result.Failure)
 	}
-	if err != nil || writeErr != nil {
-		t.Fatal("native sandbox probe failed")
+	if readErr != nil || waitErr != nil || writeErr != nil {
+		var exit *windowsWorkerExitError
+		var code uint32
+		if errors.As(waitErr, &exit) {
+			code = exit.code
+		}
+		t.Fatalf("native sandbox probe failed: stage=%s write=%s read=%s wait=%s exit=0x%08x", lastStage, windowsProbeErrorKind(writeErr), windowsProbeErrorKind(readErr), windowsProbeErrorKind(waitErr), code)
 	}
 	if !result.FileReadDenied || !result.FileWriteDenied || !result.LoopbackDenied || !result.InternetDenied || !result.ChildDenied || !result.ParentDenied || !result.EnvironmentClean || !result.JobMemoryEnforced || !result.StagingWriteDenied || !result.ACLChangeDenied || !result.RegistryIsolated || !result.ImpersonationDenied {
 		t.Fatalf("OS sandbox boundary failure: %+v", result)
@@ -354,8 +416,8 @@ func windowsBrokerMain() int {
 		return 3
 	}
 	worker.input.Close()
-	var ready struct{ Ready bool }
-	if json.NewDecoder(io.LimitReader(worker.output, 1024)).Decode(&ready) != nil || !ready.Ready {
+	var ready windowsProbeResult
+	if _, err := readWindowsProbeResult(json.NewDecoder(io.LimitReader(worker.output, 4096)), &ready); err != nil || !ready.Ready {
 		return 3
 	}
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(worker.pid))

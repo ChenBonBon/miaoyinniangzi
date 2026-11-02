@@ -63,6 +63,6 @@ MIAOYIN_DOWNLOAD_TEST_DIRECTORY="/Volumes/你的磁盘" go test -v ./internal/do
 
 该测试使用本地合成音频，不接触音源或网络，验证整曲落盘、未知文件冲突保护、字节完整性、去重及临时名移除。默认跳过；本轮已在本地文件系统验证脚本，真实 exFAT/FAT/NTFS 需在对应卷执行。故障注入另覆盖磁盘不足/离线/不支持发布、断点外部修改、目录替换、成功记录写入失败后离线恢复及并发目标名竞争。
 
-显式 `MIAOYIN_LIVE_DOWNLOAD=1 MIAOYIN_SOURCE_TEST_PATH=... go test -v ./internal/sourceruntime -run '^TestProvidedDownloadLive$'` 进行真实音源整曲下载和原子发布测试，默认跳过以免消耗额度与流量；已分别通过 FLAC、320K、128K 测试（`MIAOYIN_DOWNLOAD_TEST_QUALITY` 选择档位），不输出地址或识别性元数据。
+显式 `MIAOYIN_LIVE_DOWNLOAD=1 MIAOYIN_SOURCE_TEST_PATH=... go test -tags source_live -v ./internal/sourceruntime -run '^TestProvidedDownloadLive$'` 进行真实音源整曲下载和原子发布测试，默认跳过以免消耗额度与流量；已分别通过 FLAC、320K、128K 测试（`MIAOYIN_DOWNLOAD_TEST_QUALITY` 选择档位），不输出地址或识别性元数据。
 
 浏览器 mock 只验证桥接和 UI，不证明真实文件已下载。最终仍需真实 `.app` 验收暂停、退出再继续、音质降级与目录切换；Windows 真机按既定计划留到全部开发结束后。

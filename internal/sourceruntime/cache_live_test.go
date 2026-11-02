@@ -1,3 +1,5 @@
+//go:build source_live
+
 package sourceruntime
 
 import (

@@ -30,6 +30,8 @@ LPAC 验证读取原生 `NtQueryInformationToken(TokenSecurityAttributes)`（cla
 go test -count=1 -v ./internal/sourceruntime
 ```
 
+默认测试二进制需保持与最小 worker 一样不加载应用层初始化依赖。真实缓存/下载/原生音频测试已移到 `source_live` 显式编译标签下，避免即使运行时 skip 仍静态链接 SQLite/C 运行库；增加依赖回归检查。运行 Windows 原生探针时不带 `source_live`。
+
 新增 Windows 专用测试不会因缺少隔离支持而跳过：
 
 - 直接原生读取/写入用户私有测试文件被拒，容器不能修改 staging 文件夹或其 ACL；只使用合成假密钥，不访问真实用户密钥。
@@ -40,7 +42,7 @@ go test -count=1 -v ./internal/sourceruntime
 - 真实杀死独立 broker 后，worker 随 Job 自动退出，不依赖 Go defer 或前端退出事件。
 - 离线检查、父进程伪造网络 RPC、取消、异常脱敏及输入输出上限在 Windows 真进程中运行，而不再跳过正向协议测试。
 
-若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中；令牌失败时还输出 elevation、完整性 RID、AppContainer/LPAC 标志、capability 数量与预期 SID 是否匹配。只输出数字/布尔状态，不输出 SID 正文、源脚本、路径或密钥。请保留这些诊断，不以移除 LPAC/Job 来排查。
+若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中；令牌失败时还输出 elevation、完整性 RID、AppContainer/LPAC 标志、capability 数量与预期 SID 是否匹配。只输出数字/布尔状态，不输出 SID 正文、源脚本、路径或密钥。进程无正常结果时还保留 `before_entry` / `probe_entry` / `sandbox_ready` / `request_read` 固定阶段、分类后的管道读写错误和十六进制退出码；不输出原始 stderr。请保留这些诊断，不以移除 LPAC/Job 来排查。
 
 通过后运行完整构建：
 

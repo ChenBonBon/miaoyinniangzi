@@ -101,6 +101,8 @@ npm run test:e2e
 - 公私网 IP、混合 DNS、IP 拨号固定、防重绑定、鉴权头规则、重定向、响应上限及已知授权/限流停止。
 - 当前源快照解密、音质降级、不升级偏好、禁用取消、不保留明文缓冲；前端成功/降级/失败/取消，不请求媒体或自动播放。
 
+真实缓存、下载、原生播放/跳转的重型集成测试需额外使用 `go test -tags source_live`，并继续显式设置原有 opt-in 环境变量；默认测试二进制不静态链接这些测试的 SQLite、C 运行库、播放器依赖，避免其在 Windows lowbox 的 `TestMain` 之前初始化。该编译标签只选择测试，不放宽任何 OS 隔离策略；Windows 默认原生探针不应带此标签。
+
 可通过环境变量 `MIAOYIN_SOURCE_TEST_PATH` 显式提供真实脚本进行离线冒烟检查，测试输出仅包含普通音质列表，不输出正文或密钥。默认自动测试不访问真实用户音源、数据库或 Keychain。新增 `TestProvidedSourceResolveOffline` 同样需显式设置该变量，用伪造网络响应验证真实脚本的 FLAC handler，但不会联系音源服务或消耗服务额度；不能用它证明线上解析可用。
 
 可用 `MIAOYIN_LIVE_SOURCE_PROXY=1 go test -v ./internal/sourcenetwork -run TestLivePublicHTTPSProxy` 验证实际的公网 HTTPS/IP 固定拨号路径，目标是匿名 QQ 元数据接口，不使用音源服务或密钥；本次在实际 Fake-IP 网络中通过，完整客户端交互仍需验收。
