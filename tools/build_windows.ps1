@@ -58,11 +58,11 @@ try {
     } finally { Pop-Location }
     if ($Tests) {
         $env:MIAOYIN_MPV_LIBRARY = Join-Path $root 'build\deps\windows-x64\libmpv-2.dll'
-        Invoke-Checked 'go' @('test', './...')
+        Invoke-Checked 'go' @('test', '-ldflags=-H=windowsgui', './...')
         $env:MIAOYIN_MPV_LIBRARY = $null
     }
     Invoke-Checked 'go' @('run', 'github.com/wailsapp/wails/v2/cmd/wails@v2.17.0', 'build', '-platform', 'windows/amd64', '-s', '-m', '-webview2', 'error')
-    Invoke-Checked 'go' @('build', '-trimpath', '-ldflags=-s -w', '-o', (Join-Path $root 'build\bin\miaoyin-source-worker.exe'), './tools/source_worker')
+    Invoke-Checked 'go' @('build', '-trimpath', '-ldflags=-s -w -H=windowsgui', '-o', (Join-Path $root 'build\bin\miaoyin-source-worker.exe'), './tools/source_worker')
     Invoke-Checked 'go' @('run', './tools/windows_build', 'sandbox', '--exe', (Join-Path $root 'build\bin\miaoyinniangzi.exe'))
     $name = 'windows-x64-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 6)
     $output = Join-Path $root ('build\bin\' + $name)

@@ -15,7 +15,12 @@ func TestMinimalWorkerOfflineAndBrokerSmoke(t *testing.T) {
 		t.Skip("implemented sandbox required")
 	}
 	helper := filepath.Join(t.TempDir(), "miaoyin-source-worker.exe")
-	command := exec.Command("go", "build", "-o", helper, "../source_worker")
+	arguments := []string{"build", "-o", helper}
+	if runtime.GOOS == "windows" {
+		arguments = append(arguments, "-ldflags=-H=windowsgui")
+	}
+	arguments = append(arguments, "../source_worker")
+	command := exec.Command("go", arguments...)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("minimal helper build failed: %s", output)
 	}

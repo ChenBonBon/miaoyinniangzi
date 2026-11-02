@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"debug/pe"
 	"encoding/hex"
 	"io"
 	"os"
@@ -234,6 +235,15 @@ func stageWorker(ctx context.Context, source string) (stage *stagedExecutable, e
 	}
 	input := os.NewFile(uintptr(sourceHandle), source)
 	defer input.Close()
+	image, imageErr := pe.NewFile(input)
+	if imageErr != nil {
+		return nil, sandboxFailure("worker executable PE")
+	}
+	header, ok := image.OptionalHeader.(*pe.OptionalHeader64)
+	if !ok || header.Subsystem != pe.IMAGE_SUBSYSTEM_WINDOWS_GUI {
+		return nil, sandboxFailure("worker executable requires GUI subsystem (-H=windowsgui)")
+	}
+
 	var sourceInfo windows.ByHandleFileInformation
 	if windows.GetFileInformationByHandle(sourceHandle, &sourceInfo) != nil || sourceInfo.FileAttributes&(windows.FILE_ATTRIBUTE_REPARSE_POINT|windows.FILE_ATTRIBUTE_DIRECTORY) != 0 {
 		return nil, errWindowsSandbox

@@ -4,7 +4,7 @@
 
 ## 边界
 
-Windows 使用独立的 `miaoyin-source-worker.exe`，只链接 Goja 和受控协议所需代码，不初始化 Wails、SQLite、DPAPI 或播放器。主进程解密脚本后经匿名管道传送，不把脚本、密钥、请求、歌词或音乐地址放进命令行、环境、临时文件和日志。
+Windows 使用独立的 GUI 子系统（`-H=windowsgui`）`miaoyin-source-worker.exe`，只链接 Goja 和受控协议所需代码，不初始化 Wails、SQLite、DPAPI 或播放器。主进程解密脚本后经匿名管道传送，不把脚本、密钥、请求、歌词或音乐地址放进命令行、环境、临时文件和日志。
 
 主程序与辅助 EXE 必须来自同次构建并保持相邻；缺少辅助程序直接失败，不回退到主进程或普通权限进程。macOS 保持同二进制辅助分支，不受这个布局影响。Windows 使用独立的运行器版本，旧检查状态需重新校验，不自动启用音源。
 
@@ -14,20 +14,20 @@ Windows 使用独立的 `miaoyin-source-worker.exe`，只链接 Goja 和受控�
 2. 只在这个专用 profile 的 package/AC 目录设置当前用户、SYSTEM 完全控制和该 SID 只读/执行的 DACL；拒绝未知目录布局或 reparse point，不更改全局 AppData、Packages 或其他应用目录权限。
 3. 使用原生 handle-relative 原子创建私有随机 staging 子目录，ACL 在创建时生效。容器 SID 只读/执行，OWNER RIGHTS 限制隐式 WRITE_DAC；保留不共享删除的目录句柄。只复制公开的辅助 EXE，校验复制前后 SHA-256，固定只读且不共享写/删的文件句柄。正常结束删除副本。
 4. 配置匿名 Job：单进程、2 秒用户 CPU 时间、256MiB 进程/Job 提交内存、kill-on-job-close、禁止 breakaway，完整 UI/剪贴板限制。Go 仍有 64MiB 软内存预算，父进程继续每 10ms 监测 RSS，192MiB 或连续无法监控则终止整个 Job。
-5. `STARTUPINFOEX` 必须同时包含无 capabilities 的 AppContainer、LPAC opt-out、禁止子进程、创建时 Job list、标准输入/输出/NUL 共三个句柄的白名单。环境使用显式白名单：Go 资源预算、系统目录/盘、UTC，以及通过 OS Known Folders 获取的 USERPROFILE、LOCALAPPDATA、APPDATA、TEMP/TMP 路径，供 Windows lowbox/profile 初始化展开。不复制父进程环境，不继承 HOME、PATH、USERNAME、凭据或开发调试变量；传入路径不授予相应文件访问权限，原生私有文件/注册表拒绝测试仍须通过。工作目录为系统目录。
+5. `STARTUPINFOEX` 必须同时包含无 capabilities 的 AppContainer、LPAC opt-out、禁止子进程、创建时 Job list、标准输入/输出/NUL 共三个句柄的白名单。环境使用显式白名单：Go 资源预算、系统目录/盘、UTC，以及通过 OS Known Folders 获取的 USERPROFILE、LOCALAPPDATA、APPDATA、TEMP/TMP 路径，供 Windows lowbox/profile 初始化展开；另显式传入仅用于校验的 `MIAOYIN_SANDBOX_LOOPBACK_PORT`，其值由本次父进程监听器产生，不从用户环境继承。不复制父进程环境，不继承 HOME、PATH、USERNAME、凭据或开发调试变量；传入路径不授予相应文件访问权限，原生私有文件/注册表拒绝测试仍须通过。工作目录为系统目录。
 6. `CREATE_SUSPENDED` 创建，父进程核对实际映射程序的 native image 名与固定文件一致、令牌确为预期 SID 的低完整性、未提权 LPAC、零 capabilities、且属于指定 Job，然后才恢复线程。任一 API、属性或复核失败，终止并回收，不尝试弱化配置重启。
-7. worker 在读取第一字节脚本前再次核对令牌、Job 上限/UI 限制和禁止子进程策略，并要求固定无数据 TCP 探针得到 WSAEACCES，以验证实际网络拒绝；超时、离线或其他错误不算通过。原有 Goja 栈、定时器、墙钟中断、有界 JSON/JSONL、主进程 HTTPS broker 和媒体地址验证保持不变。Job 是资源边界，不能拿它替代 AppContainer 文件/网络边界。
+7. worker 在读取第一字节脚本前再次核对令牌、Job 上限/UI 限制和禁止子进程策略，并要求无数据 TCP 探针得到 WSAEACCES；loopback 目标使用父进程实际监听、随机分配的端口（仅该端口以显式环境项传给 worker），而非可能先返回连接被拒绝的未监听端口，以验证实际网络拒绝；超时、离线或其他错误不算通过。原有 Goja 栈、定时器、墙钟中断、有界 JSON/JSONL、主进程 HTTPS broker 和媒体地址验证保持不变。Job 是资源边界，不能拿它替代 AppContainer 文件/网络边界。
 
 LPAC 验证读取原生 `NtQueryInformationToken(TokenSecurityAttributes)`（class 39）中的系统 UInt64 属性 `WIN://NOALLAPPPKG=1`，确认 `ALL_APPLICATION_PACKAGES` opt-out。该方式与 NtCoreLib 的 `LowPrivilegeAppContainer` 判断一致；不再依赖 SDK 虽有枚举、但已在 Windows build 26200 实测返回 `STATUS_INVALID_INFO_CLASS` 的 class 46。查询失败、属性缺失/禁用、类型/版本/数量异常、重复标记、越界指针或非布尔值均不放行。仍同时要求 AppContainer、预期包 SID、低完整性、无提权、零 capabilities 和全部 Job/文件/网络约束。
 
-需要支持上述属性的现代 Windows 10/11；老版本或企业策略不支持时拒绝执行。不要求管理员权限或开发者模式。
+需要支持上述属性的现代 Windows 10/11；老版本或企业策略不支持时拒绝执行。不要求管理员权限或开发者模式。本项目在 Windows build 26200 的 LPAC/Job 组合下已实测：默认 console 子系统在进入 Go 前以 `0xc0000142` 退出，GUI 子系统可进入 Go；辅助程序构建固定 GUI，stage 发现 console EXE 时提前拒绝并给出编译提示，不改令牌或 Job 来迁就 console 初始化。
 
 ## 原生验收
 
 先在 Windows 仓库根目录运行（不设置真实源测试环境变量）：
 
 ```powershell
-go test -count=1 -v ./internal/sourceruntime
+go test -count=1 -v -ldflags="-H=windowsgui" ./internal/sourceruntime
 ```
 
 默认测试二进制需保持与最小 worker 一样不加载应用层初始化依赖。真实缓存/下载/原生音频测试已移到 `source_live` 显式编译标签下，避免即使运行时 skip 仍静态链接 SQLite/C 运行库；增加依赖回归检查。运行 Windows 原生探针时不带 `source_live`。
@@ -42,7 +42,7 @@ go test -count=1 -v ./internal/sourceruntime
 - 真实杀死独立 broker 后，worker 随 Job 自动退出，不依赖 Go defer 或前端退出事件。
 - 离线检查、父进程伪造网络 RPC、取消、异常脱敏及输入输出上限在 Windows 真进程中运行，而不再跳过正向协议测试。
 
-若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中；令牌失败时还输出 elevation、完整性 RID、AppContainer/LPAC 标志、capability 数量与预期 SID 是否匹配。只输出数字/布尔状态，不输出 SID 正文、源脚本、路径或密钥。进程无正常结果时还保留 `before_entry` / `probe_entry` / `sandbox_ready` / `request_read` 固定阶段、分类后的管道读写错误和十六进制退出码；不输出原始 stderr。请保留这些诊断，不以移除 LPAC/Job 来排查。
+若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中；令牌失败时还输出 elevation、完整性 RID、AppContainer/LPAC 标志、capability 数量与预期 SID 是否匹配。只输出数字/布尔状态，不输出 SID 正文、源脚本、路径或密钥。进程无正常结果时还保留 `before_entry` / `probe_entry` / `sandbox_ready` / `request_read` 固定阶段、分类后的管道读写错误和十六进制退出码；不输出原始 stderr。网络预检失败保留目标类别（loopback/public）、是否连接成功和数字错误码，不把超时/连接被拒绝当作访问拒绝。请保留这些诊断，不以移除 LPAC/Job 来排查。
 
 通过后运行完整构建：
 

@@ -3,10 +3,12 @@ package sourceruntime
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -47,6 +49,7 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 	var job windows.Handle
 	var process windows.ProcessInformation
 	var input, output *os.File
+	var loopback net.Listener
 	defer func() {
 		if !success {
 			if job != 0 {
@@ -69,9 +72,17 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 			if output != nil {
 				output.Close()
 			}
+			if loopback != nil {
+				loopback.Close()
+			}
 			stageCleanup()
 		}
 	}()
+	loopback, err = net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		return nil, sandboxFailure("network probe listener", err)
+	}
+	probePort := strconv.Itoa(loopback.Addr().(*net.TCPAddr).Port)
 	job, err = windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return nil, sandboxFailure("job creation", err)
@@ -160,7 +171,7 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 	if profileErr != nil || localErr != nil || roamingErr != nil {
 		return nil, sandboxFailure("known environment directories")
 	}
-	environment := workerEnvironment(systemRoot, profile, local, roaming)
+	environment := workerEnvironment(systemRoot, profile, local, roaming, probePort)
 	current, _ := windows.UTF16PtrFromString(systemRoot + "\\System32")
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -219,6 +230,7 @@ func startWorker(ctx context.Context, source, flag string, extra ...string) (*wo
 		output.Close()
 		windows.CloseHandle(process.Process)
 		windows.CloseHandle(job)
+		loopback.Close()
 		stageCleanup()
 	}}, nil
 }
@@ -229,13 +241,15 @@ func (err *windowsWorkerExitError) Error() string {
 	return fmt.Sprintf("Windows source sandbox: worker exit code=0x%08x", err.code)
 }
 
-func workerEnvironment(root, profile, local, roaming string) []uint16 {
+const loopbackProbeEnvironment = "MIAOYIN_SANDBOX_LOOPBACK_PORT"
+
+func workerEnvironment(root, profile, local, roaming, probePort string) []uint16 {
 	// Windows lowbox/profile initialization expands these paths. Supply values
 	// from OS known folders, not the parent's arbitrary environment. Knowing a
 	// path does not grant the lowbox access to it; all ACL/token checks remain.
 	temp := filepath.Join(local, "Temp")
 	values := []string{"GOGC=50", "GOMAXPROCS=2", "GOMEMLIMIT=64MiB", "GOTRACEBACK=none", "SystemRoot=" + root, "TZ=UTC", "WINDIR=" + root,
-		"SystemDrive=" + filepath.VolumeName(root), "USERPROFILE=" + profile, "LOCALAPPDATA=" + local, "APPDATA=" + roaming, "TEMP=" + temp, "TMP=" + temp}
+		"SystemDrive=" + filepath.VolumeName(root), "USERPROFILE=" + profile, "LOCALAPPDATA=" + local, "APPDATA=" + roaming, "TEMP=" + temp, "TMP=" + temp, loopbackProbeEnvironment + "=" + probePort}
 	sort.Slice(values, func(i, j int) bool { return strings.ToUpper(values[i]) < strings.ToUpper(values[j]) })
 	var result []uint16
 	for _, value := range values {

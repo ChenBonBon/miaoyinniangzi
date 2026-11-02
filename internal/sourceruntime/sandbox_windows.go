@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 	"unsafe"
@@ -159,15 +160,21 @@ func sandboxWorker() error {
 	}
 	// Verify actual WFP denial before accepting any script. An offline route or
 	// timeout is not evidence of isolation. No HTTP or source data is transmitted.
-	for _, address := range []string{"127.0.0.1:9", "1.1.1.1:443"} {
-		connection, networkErr := net.DialTimeout("tcp4", address, 500*time.Millisecond)
-		if connection != nil {
+	port, portErr := strconv.Atoi(os.Getenv(loopbackProbeEnvironment))
+	if portErr != nil || port < 1 || port > 65535 {
+		return sandboxFailure("worker network probe port")
+	}
+	for _, target := range []struct{ name, address string }{{"loopback", net.JoinHostPort("127.0.0.1", strconv.Itoa(port))}, {"public", "1.1.1.1:443"}} {
+		connection, networkErr := net.DialTimeout("tcp4", target.address, 500*time.Millisecond)
+		connected := connection != nil
+		if connected {
 			connection.Close()
 		}
 		if !errors.Is(networkErr, syscall.Errno(10013)) {
-			return sandboxFailure("worker network policy")
+			return sandboxFailure(fmt.Sprintf("worker network policy target=%s connected=%t", target.name, connected), networkErr)
 		}
 	}
+
 	return nil
 }
 func residentBytes(pid int) (uint64, error) {

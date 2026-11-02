@@ -127,7 +127,7 @@ func windowsProbeMain() int {
 	for _, variable := range os.Environ() {
 		name := strings.SplitN(variable, "=", 2)[0]
 		switch strings.ToUpper(name) {
-		case "GOGC", "GOMEMLIMIT", "GOMAXPROCS", "GOTRACEBACK", "SYSTEMROOT", "TZ", "WINDIR", "SYSTEMDRIVE", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP":
+		case "GOGC", "GOMEMLIMIT", "GOMAXPROCS", "GOTRACEBACK", "SYSTEMROOT", "TZ", "WINDIR", "SYSTEMDRIVE", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", loopbackProbeEnvironment:
 		default:
 			clean = false
 		}
@@ -538,16 +538,17 @@ func TestWindowsSandboxDiagnosticsKeepOnlyNumericErrorCodes(t *testing.T) {
 
 func TestWindowsWorkerEnvironmentDoesNotInheritCredentials(t *testing.T) {
 	t.Setenv("MIAOYIN_SECRET", "SYNTHETIC_SECRET")
+	t.Setenv(loopbackProbeEnvironment, "1")
 	t.Setenv("USERPROFILE", "WRONG_PARENT_PATH")
 	t.Setenv("LOCALAPPDATA", "WRONG_PARENT_PATH")
-	block := workerEnvironment(`C:\Windows`, `C:\Users\Fixture`, `C:\Users\Fixture\AppData\Local`, `C:\Users\Fixture\AppData\Roaming`)
+	block := workerEnvironment(`C:\Windows`, `C:\Users\Fixture`, `C:\Users\Fixture\AppData\Local`, `C:\Users\Fixture\AppData\Roaming`, "43210")
 	values := strings.Split(string(utf16.Decode(block)), "\x00")
-	if len(values) != 15 || values[len(values)-1] != "" || values[len(values)-2] != "" {
+	if len(values) != 16 || values[len(values)-1] != "" || values[len(values)-2] != "" {
 		t.Fatal("environment block is not double-NUL terminated")
 	}
 	found := map[string]string{}
 	previous := ""
-	for _, value := range values[:13] {
+	for _, value := range values[:14] {
 		pair := strings.SplitN(value, "=", 2)
 		if len(pair) != 2 {
 			t.Fatal("invalid environment entry")
@@ -567,7 +568,7 @@ func TestWindowsWorkerEnvironmentDoesNotInheritCredentials(t *testing.T) {
 			t.Fatal("unapproved environment variable")
 		}
 	}
-	if found["USERPROFILE"] != `C:\Users\Fixture` || found["SYSTEMDRIVE"] != "C:" || found["TEMP"] != `C:\Users\Fixture\AppData\Local\Temp` || found["TMP"] != found["TEMP"] {
+	if found["USERPROFILE"] != `C:\Users\Fixture` || found["SYSTEMDRIVE"] != "C:" || found["TEMP"] != `C:\Users\Fixture\AppData\Local\Temp` || found["TMP"] != found["TEMP"] || found[loopbackProbeEnvironment] != "43210" {
 		t.Fatal("required Windows paths incorrect")
 	}
 
