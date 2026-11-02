@@ -36,7 +36,7 @@ go test -count=1 -v -ldflags="-H=windowsgui" ./internal/sourceruntime
 
 - 直接原生读取/写入用户私有测试文件被拒，容器不能修改 staging 文件夹或其 ACL；只使用合成假密钥，不访问真实用户密钥。
 - 用户 HKCU 合成私有键不可读取/篡改；不把容器私有/虚拟化注册表等同于零注册表访问。
-- TCP loopback 及固定公网 `1.1.1.1:443` 必须得到 WSAEACCES，不能以超时、离线或 DNS 失败冒充网络隔离。探针使用原生 Winsock 非阻塞 connect/select（500ms），不依赖 Go `net` 在 package init 阶段缓存的 Winsock 状态。初始化失败单独拒绝并保留数字码，`WSANOTINITIALISED=10093` 不算网络隔离通过。普通进程另有真实本地监听器正向连接对照，防止把坏探针当隔离。安全配置下连接在本机被拒；若隔离回归，公网探针最多建立 TCP 连接，不发 HTTP、媒体请求或身份数据。
+- TCP loopback 及固定公网 `1.1.1.1:443` 必须得到 WSAEACCES，不能以超时、离线或 DNS 失败冒充网络隔离。探针使用原生 Winsock 非阻塞 connect/select（500ms），不依赖 Go `net` 在 package init 阶段缓存的 Winsock 状态。初始化失败单独拒绝并保留数字码，`WSANOTINITIALISED=10093` / `WSASYSCALLFAILURE=10107` 不算网络隔离通过。仅测试增加同一最小环境/System32 cwd 的普通可信子进程对照，以及固定 Winsock HKLM catalog 键打开、mswsock/nsi 系统 DLL 加载的数字错误码；不读取/输出注册表值、provider 名称、DLL 路径或用户数据，也不修改 ACL/能力。普通进程另有真实本地监听器正向连接对照，防止把坏探针当隔离。安全配置下连接在本机被拒；若隔离回归，公网探针最多建立 TCP 连接，不发 HTTP、媒体请求或身份数据。
 - 子进程启动、读取/复制父进程句柄被拒；额外可继承事件句柄未泄漏；stdin 管道不能 impersonate 成可授权访问的普通 broker 令牌。
 - 超过 Job 提交内存的原生分配被拒、无限持有的内存任务及原生 CPU 死循环被回收；拒绝无容器/Job 的直接 worker 调用。
 - 真实杀死独立 broker 后，worker 随 Job 自动退出，不依赖 Go defer 或前端退出事件。

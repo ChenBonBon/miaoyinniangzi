@@ -14,6 +14,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "--miaoyin-winsock-control-test" {
+		os.Exit(windowsWinsockControlMain())
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--miaoyin-sandbox-broker-test" {
 		os.Exit(windowsBrokerMain())
 	}

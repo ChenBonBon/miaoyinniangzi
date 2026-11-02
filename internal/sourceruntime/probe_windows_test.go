@@ -34,6 +34,7 @@ type windowsProbeRequest struct {
 	CPU                   bool
 }
 type windowsProbeResult struct {
+	Bootstrap                                                                                                                                                                                                   *winsockBootstrapDiagnostics `json:",omitempty"`
 	Stage                                                                                                                                                                                                       string
 	Ready                                                                                                                                                                                                       bool
 	Failure                                                                                                                                                                                                     string
@@ -48,7 +49,12 @@ func windowsProbeMain() int {
 		return 101
 	}
 	if err := sandboxWorker(); err != nil {
-		_ = json.NewEncoder(os.Stdout).Encode(windowsProbeResult{Failure: err.Error()})
+		result := windowsProbeResult{Failure: err.Error()}
+		if strings.HasPrefix(result.Failure, "Windows source sandbox: worker Winsock initialization") {
+			diagnostics := inspectWinsockBootstrap()
+			result.Bootstrap = &diagnostics
+		}
+		_ = json.NewEncoder(os.Stdout).Encode(result)
 		return 0
 	}
 	if windowsProbeStage("sandbox_ready") != nil {
@@ -291,6 +297,9 @@ func TestWindowsSandboxNativeBoundaries(t *testing.T) {
 		t.Fatal("native sandbox probe timed out")
 	}
 	if strings.HasPrefix(result.Failure, "Windows source sandbox: ") {
+		if result.Bootstrap != nil {
+			t.Logf("lowbox OS bootstrap: %+v", *result.Bootstrap)
+		}
 		t.Fatal(result.Failure)
 	}
 	if readErr != nil || waitErr != nil || writeErr != nil {
