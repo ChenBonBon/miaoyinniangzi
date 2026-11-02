@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strconv"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -160,16 +159,15 @@ func sandboxWorker() error {
 	}
 	// Verify actual WFP denial before accepting any script. An offline route or
 	// timeout is not evidence of isolation. No HTTP or source data is transmitted.
+	if err := initializeWorkerWinsock(); err != nil {
+		return err
+	}
 	port, portErr := strconv.Atoi(os.Getenv(loopbackProbeEnvironment))
 	if portErr != nil || port < 1 || port > 65535 {
 		return sandboxFailure("worker network probe port")
 	}
 	for _, target := range []struct{ name, address string }{{"loopback", net.JoinHostPort("127.0.0.1", strconv.Itoa(port))}, {"public", "1.1.1.1:443"}} {
-		connection, networkErr := net.DialTimeout("tcp4", target.address, 500*time.Millisecond)
-		connected := connection != nil
-		if connected {
-			connection.Close()
-		}
+		connected, networkErr := nativeTCPProbe(target.address)
 		if !errors.Is(networkErr, syscall.Errno(10013)) {
 			return sandboxFailure(fmt.Sprintf("worker network policy target=%s connected=%t", target.name, connected), networkErr)
 		}

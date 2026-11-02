@@ -16,7 +16,7 @@ Windows 使用独立的 GUI 子系统（`-H=windowsgui`）`miaoyin-source-worker
 4. 配置匿名 Job：单进程、2 秒用户 CPU 时间、256MiB 进程/Job 提交内存、kill-on-job-close、禁止 breakaway，完整 UI/剪贴板限制。Go 仍有 64MiB 软内存预算，父进程继续每 10ms 监测 RSS，192MiB 或连续无法监控则终止整个 Job。
 5. `STARTUPINFOEX` 必须同时包含无 capabilities 的 AppContainer、LPAC opt-out、禁止子进程、创建时 Job list、标准输入/输出/NUL 共三个句柄的白名单。环境使用显式白名单：Go 资源预算、系统目录/盘、UTC，以及通过 OS Known Folders 获取的 USERPROFILE、LOCALAPPDATA、APPDATA、TEMP/TMP 路径，供 Windows lowbox/profile 初始化展开；另显式传入仅用于校验的 `MIAOYIN_SANDBOX_LOOPBACK_PORT`，其值由本次父进程监听器产生，不从用户环境继承。不复制父进程环境，不继承 HOME、PATH、USERNAME、凭据或开发调试变量；传入路径不授予相应文件访问权限，原生私有文件/注册表拒绝测试仍须通过。工作目录为系统目录。
 6. `CREATE_SUSPENDED` 创建，父进程核对实际映射程序的 native image 名与固定文件一致、令牌确为预期 SID 的低完整性、未提权 LPAC、零 capabilities、且属于指定 Job，然后才恢复线程。任一 API、属性或复核失败，终止并回收，不尝试弱化配置重启。
-7. worker 在读取第一字节脚本前再次核对令牌、Job 上限/UI 限制和禁止子进程策略，并要求无数据 TCP 探针得到 WSAEACCES；loopback 目标使用父进程实际监听、随机分配的端口（仅该端口以显式环境项传给 worker），而非可能先返回连接被拒绝的未监听端口，以验证实际网络拒绝；超时、离线或其他错误不算通过。原有 Goja 栈、定时器、墙钟中断、有界 JSON/JSONL、主进程 HTTPS broker 和媒体地址验证保持不变。Job 是资源边界，不能拿它替代 AppContainer 文件/网络边界。
+7. worker 在读取第一字节脚本前再次核对令牌、Job 上限/UI 限制和禁止子进程策略，显式执行 Winsock 2.2 初始化，并要求无数据 TCP 探针得到 WSAEACCES；loopback 目标使用父进程实际监听、随机分配的端口（仅该端口以显式环境项传给 worker），而非可能先返回连接被拒绝的未监听端口，以验证实际网络拒绝；超时、离线或其他错误不算通过。原有 Goja 栈、定时器、墙钟中断、有界 JSON/JSONL、主进程 HTTPS broker 和媒体地址验证保持不变。Job 是资源边界，不能拿它替代 AppContainer 文件/网络边界。
 
 LPAC 验证读取原生 `NtQueryInformationToken(TokenSecurityAttributes)`（class 39）中的系统 UInt64 属性 `WIN://NOALLAPPPKG=1`，确认 `ALL_APPLICATION_PACKAGES` opt-out。该方式与 NtCoreLib 的 `LowPrivilegeAppContainer` 判断一致；不再依赖 SDK 虽有枚举、但已在 Windows build 26200 实测返回 `STATUS_INVALID_INFO_CLASS` 的 class 46。查询失败、属性缺失/禁用、类型/版本/数量异常、重复标记、越界指针或非布尔值均不放行。仍同时要求 AppContainer、预期包 SID、低完整性、无提权、零 capabilities 和全部 Job/文件/网络约束。
 
@@ -36,7 +36,7 @@ go test -count=1 -v -ldflags="-H=windowsgui" ./internal/sourceruntime
 
 - 直接原生读取/写入用户私有测试文件被拒，容器不能修改 staging 文件夹或其 ACL；只使用合成假密钥，不访问真实用户密钥。
 - 用户 HKCU 合成私有键不可读取/篡改；不把容器私有/虚拟化注册表等同于零注册表访问。
-- TCP loopback 及固定公网 `1.1.1.1:443` 必须得到 WSAEACCES，不能以超时、离线或 DNS 失败冒充网络隔离。安全配置下连接在本机被拒；若隔离回归，公网探针最多建立 TCP 连接，不发 HTTP、媒体请求或身份数据。
+- TCP loopback 及固定公网 `1.1.1.1:443` 必须得到 WSAEACCES，不能以超时、离线或 DNS 失败冒充网络隔离。探针使用原生 Winsock 非阻塞 connect/select（500ms），不依赖 Go `net` 在 package init 阶段缓存的 Winsock 状态。初始化失败单独拒绝并保留数字码，`WSANOTINITIALISED=10093` 不算网络隔离通过。普通进程另有真实本地监听器正向连接对照，防止把坏探针当隔离。安全配置下连接在本机被拒；若隔离回归，公网探针最多建立 TCP 连接，不发 HTTP、媒体请求或身份数据。
 - 子进程启动、读取/复制父进程句柄被拒；额外可继承事件句柄未泄漏；stdin 管道不能 impersonate 成可授权访问的普通 broker 令牌。
 - 超过 Job 提交内存的原生分配被拒、无限持有的内存任务及原生 CPU 死循环被回收；拒绝无容器/Job 的直接 worker 调用。
 - 真实杀死独立 broker 后，worker 随 Job 自动退出，不依赖 Go defer 或前端退出事件。

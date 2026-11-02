@@ -90,11 +90,8 @@ func windowsProbeMain() int {
 	_, readErr := os.ReadFile(request.Read)
 	writeErr := os.WriteFile(request.Write, []byte("must-not-write"), 0600)
 	denied := func(address string) bool {
-		connection, err := net.DialTimeout("tcp4", address, 600*time.Millisecond)
-		if connection != nil {
-			connection.Close()
-		}
-		return errors.Is(err, syscall.Errno(10013)) // WSAEACCES, not a timeout/offline false positive.
+		connected, err := nativeTCPProbe(address)
+		return !connected && errors.Is(err, syscall.Errno(10013)) // WSAEACCES, not a timeout/offline false positive.
 	}
 	system, _ := windows.GetWindowsDirectory()
 	childErr := exec.Command(filepath.Join(system, "System32", "cmd.exe"), "/c", "exit", "0").Run()
