@@ -34,6 +34,28 @@ func TestWindowsTokenInformationBuffers(t *testing.T) {
 		}
 	}
 }
+func TestWindowsNativeTokenQueryMatchesPublicAPI(t *testing.T) {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
+		t.Fatal(sandboxFailure("test token open", err))
+	}
+	defer token.Close()
+	expected, err := tokenValue(token, 29)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual, err := nativeTokenValue(token, 29)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual != expected {
+		t.Fatal("native token query ABI disagrees with public API")
+	}
+	if _, err = nativeTokenValue(token, ^uint32(0)); err == nil {
+		t.Fatal("invalid native query accepted")
+	}
+}
+
 func TestWindowsTokenSIDRejectsOutOfBufferPointers(t *testing.T) {
 	info := new(tokenInfoBuffer)
 	info.size = 64

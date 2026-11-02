@@ -18,6 +18,8 @@ Windows 使用独立的 `miaoyin-source-worker.exe`，只链接 Goja 和受控�
 6. `CREATE_SUSPENDED` 创建，父进程核对实际映射程序的 native image 名与固定文件一致、令牌确为预期 SID 的低完整性、未提权 LPAC、零 capabilities、且属于指定 Job，然后才恢复线程。任一 API、属性或复核失败，终止并回收，不尝试弱化配置重启。
 7. worker 在读取第一字节脚本前再次核对令牌、Job 上限/UI 限制和禁止子进程策略，并要求固定无数据 TCP 探针得到 WSAEACCES，以验证实际网络拒绝；超时、离线或其他错误不算通过。原有 Goja 栈、定时器、墙钟中断、有界 JSON/JSONL、主进程 HTTPS broker 和媒体地址验证保持不变。Job 是资源边界，不能拿它替代 AppContainer 文件/网络边界。
 
+LPAC 标志使用原生 `NtQueryInformationToken` 的 `TokenIsLessPrivilegedAppContainer`（class 46、DWORD 结构）读取，避免部分 Windows 构建的 Win32 `GetTokenInformation` 对该类返回无效参数。原生 API 错误或返回长度不符仍拒绝，绝不把查询失败当作 LPAC=true；其他令牌约束不变。
+
 需要支持上述属性的现代 Windows 10/11；老版本或企业策略不支持时拒绝执行。不要求管理员权限或开发者模式。
 
 ## 原生验收
@@ -62,4 +64,5 @@ AppContainer/LPAC 不等于完全没有系统资源访问；系统 DLL、必要�
 
 - [CreateAppContainerProfile](https://learn.microsoft.com/windows/win32/api/userenv/nf-userenv-createappcontainerprofile)、[GetAppContainerFolderPath](https://learn.microsoft.com/windows/win32/api/userenv/nf-userenv-getappcontainerfolderpath)
 - [UpdateProcThreadAttribute](https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)，LPAC opt-out/child/job 属性数值对应 Microsoft WinSDK `WinBase.h`。
+- [NtQueryInformationToken](https://learn.microsoft.com/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntqueryinformationtoken)，令牌信息类/结构核对 WinSDK 与 [phnt `ntseapi.h`](https://github.com/winsiderss/systeminformer/blob/master/phnt/include/ntseapi.h)。
 - [Job Objects](https://learn.microsoft.com/windows/win32/procthread/job-objects)、[NetworkIsolationGetAppContainerConfig](https://learn.microsoft.com/windows/win32/api/networkisolation/nf-networkisolation-networkisolationgetappcontainerconfig)

@@ -7,6 +7,26 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Win32 GetTokenInformation does not expose every TOKEN_INFORMATION_CLASS on
+// every Windows build. Query the LPAC flag through the native token API, keeping
+// exactly the same class, DWORD layout and strict success/length requirements.
+func nativeTokenValue(token windows.Token, class uint32) (uint32, error) {
+	proc := windows.NewLazySystemDLL("ntdll.dll").NewProc("NtQueryInformationToken")
+	if proc.Find() != nil {
+		return 0, sandboxFailure("native token query API")
+	}
+	var value, size uint32
+	result, _, _ := proc.Call(uintptr(token), uintptr(class), uintptr(unsafe.Pointer(&value)), 4, uintptr(unsafe.Pointer(&size)))
+	status := windows.NTStatus(uint32(result))
+	if int32(status) < 0 {
+		return 0, sandboxFailure(fmt.Sprintf("native token query class=%d ntstatus=0x%08x", class, uint32(status)), status.Errno())
+	}
+	if size != 4 {
+		return 0, sandboxFailure(fmt.Sprintf("native token query class=%d bytes=%d", class, size))
+	}
+	return value, nil
+}
+
 // Token information contains native pointers. A byte array has alignment 1 and
 // is not a suitable ABI buffer on every Go stack layout. uintptr storage forces
 // pointer alignment, including when the compiler keeps the object on the stack.
