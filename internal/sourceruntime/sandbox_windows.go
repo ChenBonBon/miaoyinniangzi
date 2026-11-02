@@ -90,7 +90,7 @@ func validateContainerToken(process windows.Handle) error {
 	if state.appContainer != 1 {
 		return state.validate()
 	}
-	if state.lpac, err = nativeTokenValue(token, 46); err != nil {
+	if state.lpac, err = tokenLPACFlag(token); err != nil {
 		return err
 	}
 	caps, err := queryTokenInfo(token, 30)

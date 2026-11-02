@@ -7,31 +7,31 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Win32 GetTokenInformation does not expose every TOKEN_INFORMATION_CLASS on
-// every Windows build. Query the LPAC flag through the native token API, keeping
-// exactly the same class, DWORD layout and strict success/length requirements.
-func nativeTokenValue(token windows.Token, class uint32) (uint32, error) {
+// Native token security attributes use UNICODE_STRING names and pointer-rich
+// structures, not the Win32 CLAIM_SECURITY_ATTRIBUTE representation.
+func queryNativeTokenInfo(token windows.Token, class uint32) (*tokenInfoBuffer, error) {
 	proc := windows.NewLazySystemDLL("ntdll.dll").NewProc("NtQueryInformationToken")
 	if proc.Find() != nil {
-		return 0, sandboxFailure("native token query API")
+		return nil, sandboxFailure("native token query API")
 	}
-	var value, size uint32
-	result, _, _ := proc.Call(uintptr(token), uintptr(class), uintptr(unsafe.Pointer(&value)), 4, uintptr(unsafe.Pointer(&size)))
+	info := new(tokenInfoBuffer)
+	capacity := uint32(unsafe.Sizeof(info.words))
+	result, _, _ := proc.Call(uintptr(token), uintptr(class), uintptr(unsafe.Pointer(&info.words[0])), uintptr(capacity), uintptr(unsafe.Pointer(&info.size)))
 	status := windows.NTStatus(uint32(result))
 	if int32(status) < 0 {
-		return 0, sandboxFailure(fmt.Sprintf("native token query class=%d ntstatus=0x%08x", class, uint32(status)), status.Errno())
+		return nil, sandboxFailure(fmt.Sprintf("native token query class=%d ntstatus=0x%08x", class, uint32(status)), status.Errno())
 	}
-	if size != 4 {
-		return 0, sandboxFailure(fmt.Sprintf("native token query class=%d bytes=%d", class, size))
+	if info.size > capacity {
+		return nil, sandboxFailure("native token information bounds")
 	}
-	return value, nil
+	return info, nil
 }
 
 // Token information contains native pointers. A byte array has alignment 1 and
 // is not a suitable ABI buffer on every Go stack layout. uintptr storage forces
 // pointer alignment, including when the compiler keeps the object on the stack.
 type tokenInfoBuffer struct {
-	words [512]uintptr
+	words [8192]uintptr
 	size  uint32
 }
 

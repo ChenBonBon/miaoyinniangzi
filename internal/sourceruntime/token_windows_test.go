@@ -44,14 +44,25 @@ func TestWindowsNativeTokenQueryMatchesPublicAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actual, err := nativeTokenValue(token, 29)
+	info, err := queryNativeTokenInfo(token, 29)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if info.size != 4 {
+		t.Fatal("native DWORD token result has wrong size")
+	}
+	actual := *(*uint32)(unsafe.Pointer(&info.words[0]))
 	if actual != expected {
 		t.Fatal("native token query ABI disagrees with public API")
 	}
-	if _, err = nativeTokenValue(token, ^uint32(0)); err == nil {
+	flag, err := tokenLPACFlag(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected == 0 && flag != 0 {
+		t.Fatal("ordinary token marked LPAC")
+	}
+	if _, err = queryNativeTokenInfo(token, ^uint32(0)); err == nil {
 		t.Fatal("invalid native query accepted")
 	}
 }
