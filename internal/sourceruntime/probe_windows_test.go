@@ -28,7 +28,6 @@ type windowsProbeRequest struct {
 	Read, Write, Loopback string
 	Registry              string
 	Parent                uint32
-	ExtraHandle           uintptr
 	Hang                  bool
 	Memory                bool
 	CPU                   bool
@@ -121,10 +120,6 @@ func windowsProbeMain() (exit int) {
 	handle, parentErr := windows.OpenProcess(windows.PROCESS_VM_READ|windows.PROCESS_DUP_HANDLE, false, request.Parent)
 	if parentErr == nil {
 		windows.CloseHandle(handle)
-	}
-	// If an unrelated inheritable event leaked, this signals the parent's object.
-	if request.ExtraHandle != 0 {
-		_ = windows.SetEvent(windows.Handle(request.ExtraHandle))
 	}
 	stage("staging_checks")
 	executable, _ := os.Executable()
@@ -270,6 +265,7 @@ func probePipeImpersonationDenied() bool {
 
 func TestWindowsSandboxNativeBoundaries(t *testing.T) {
 	requireNativeAFDControl(t)
+	requireHandleSnapshotControl(t)
 	version := windows.RtlGetVersion()
 	t.Logf("Windows kernel %d.%d build %d; arch=%s", version.MajorVersion, version.MinorVersion, version.BuildNumber, runtime.GOARCH)
 	var parentInJob uint32
@@ -320,12 +316,29 @@ func TestWindowsSandboxNativeBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer worker.close()
+	query, queryErr := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION, false, uint32(worker.pid))
+	if queryErr != nil {
+		worker.kill()
+		worker.wait()
+		t.Fatal("cannot open lowbox for read-only handle audit")
+	}
+	extraPresent, snapshotErr := processInheritedHandlePresent(query, event)
+	windows.CloseHandle(query)
+	if snapshotErr != nil || extraPresent {
+		worker.kill()
+		worker.wait()
+		if snapshotErr != nil {
+			t.Fatal(snapshotErr)
+		}
+		t.Fatal("extra inheritable event leaked into lowbox handle snapshot")
+	}
+	t.Log("lowbox handle snapshot: unrelated inheritable event absent")
 	if _, err := residentBytes(worker.pid); err != nil {
 		worker.kill()
 		worker.wait()
 		t.Fatal("cannot monitor contained worker RSS")
 	}
-	writeErr := json.NewEncoder(worker.input).Encode(windowsProbeRequest{Read: secret, Write: filepath.Join(dir, "must-not-exist"), Loopback: listener.Addr().String(), Registry: registryPath, Parent: windows.GetCurrentProcessId(), ExtraHandle: uintptr(event)})
+	writeErr := json.NewEncoder(worker.input).Encode(windowsProbeRequest{Read: secret, Write: filepath.Join(dir, "must-not-exist"), Loopback: listener.Addr().String(), Registry: registryPath, Parent: windows.GetCurrentProcessId()})
 	worker.input.Close()
 	var result windowsProbeResult
 	var readErr, waitErr error
