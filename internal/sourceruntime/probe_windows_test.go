@@ -44,7 +44,20 @@ type windowsProbeResult struct {
 func windowsProbeStage(stage string) error {
 	return json.NewEncoder(os.Stdout).Encode(struct{ Stage string }{stage})
 }
-func windowsProbeMain() int {
+func windowsProbeMain() (exit int) {
+	lastStage := "probe_entry"
+	defer func() {
+		if recover() != nil {
+			_ = json.NewEncoder(os.Stdout).Encode(windowsProbeResult{Failure: "Windows source sandbox: native probe panic stage=" + lastStage})
+			exit = 102
+		}
+	}()
+	stage := func(name string) {
+		lastStage = name
+		if windowsProbeStage(name) != nil {
+			panic(struct{}{})
+		}
+	}
 	if windowsProbeStage("probe_entry") != nil {
 		return 101
 	}
@@ -93,14 +106,18 @@ func windowsProbeMain() int {
 			}
 		}
 	}
+	stage("file_checks")
 	_, readErr := os.ReadFile(request.Read)
 	writeErr := os.WriteFile(request.Write, []byte("must-not-write"), 0600)
 	denied := func(address string) bool {
 		connected, err := nativeTCPProbe(address)
 		return !connected && networkPolicyDenied(err) // Kernel access denial, not initialization failure or offline status.
 	}
-	system, _ := windows.GetWindowsDirectory()
-	childErr := exec.Command(filepath.Join(system, "System32", "cmd.exe"), "/c", "exit", "0").Run()
+	stage("network_checks")
+	loopbackDenied, internetDenied := denied(request.Loopback), denied("1.1.1.1:443")
+	stage("child_check")
+	childDenied := probeNativeChildDenied()
+	stage("parent_handle_check")
 	handle, parentErr := windows.OpenProcess(windows.PROCESS_VM_READ|windows.PROCESS_DUP_HANDLE, false, request.Parent)
 	if parentErr == nil {
 		windows.CloseHandle(handle)
@@ -109,6 +126,7 @@ func windowsProbeMain() int {
 	if request.ExtraHandle != 0 {
 		_ = windows.SetEvent(windows.Handle(request.ExtraHandle))
 	}
+	stage("staging_checks")
 	executable, _ := os.Executable()
 	stagingWriteErr := os.WriteFile(filepath.Join(filepath.Dir(executable), "must-not-write"), []byte("fixture"), 0600)
 	directoryName, _ := windows.UTF16PtrFromString(filepath.Dir(executable))
@@ -116,6 +134,7 @@ func windowsProbeMain() int {
 	if aclErr == nil {
 		windows.CloseHandle(aclHandle)
 	}
+	stage("registry_check")
 	registryIsolated := true
 	key, keyErr := registry.OpenKey(registry.CURRENT_USER, request.Registry, registry.QUERY_VALUE|registry.SET_VALUE)
 	if keyErr == nil {
@@ -135,13 +154,16 @@ func windowsProbeMain() int {
 			clean = false
 		}
 	}
+	stage("memory_check")
 	allocation, allocationErr := windows.VirtualAlloc(0, jobMemoryLimit+64*1024*1024, windows.MEM_RESERVE|windows.MEM_COMMIT, windows.PAGE_READWRITE)
 	memoryDenied := allocation == 0 && allocationErr != nil
 	if allocation != 0 {
 		windows.VirtualFree(allocation, 0, windows.MEM_RELEASE)
 	}
+	stage("impersonation_check")
 	impersonationDenied := probePipeImpersonationDenied()
-	result := windowsProbeResult{FileReadDenied: errors.Is(readErr, os.ErrPermission), FileWriteDenied: errors.Is(writeErr, os.ErrPermission), LoopbackDenied: denied(request.Loopback), InternetDenied: denied("1.1.1.1:443"), ChildDenied: childErr != nil, ParentDenied: errors.Is(parentErr, windows.ERROR_ACCESS_DENIED), EnvironmentClean: clean, JobMemoryEnforced: memoryDenied, StagingWriteDenied: errors.Is(stagingWriteErr, os.ErrPermission), ACLChangeDenied: errors.Is(aclErr, windows.ERROR_ACCESS_DENIED), RegistryIsolated: registryIsolated, ImpersonationDenied: impersonationDenied}
+	stage("result_write")
+	result := windowsProbeResult{FileReadDenied: errors.Is(readErr, os.ErrPermission), FileWriteDenied: errors.Is(writeErr, os.ErrPermission), LoopbackDenied: loopbackDenied, InternetDenied: internetDenied, ChildDenied: childDenied, ParentDenied: errors.Is(parentErr, windows.ERROR_ACCESS_DENIED), EnvironmentClean: clean, JobMemoryEnforced: memoryDenied, StagingWriteDenied: errors.Is(stagingWriteErr, os.ErrPermission), ACLChangeDenied: errors.Is(aclErr, windows.ERROR_ACCESS_DENIED), RegistryIsolated: registryIsolated, ImpersonationDenied: impersonationDenied}
 	if json.NewEncoder(os.Stdout).Encode(result) != nil {
 		return 5
 	}
@@ -159,7 +181,7 @@ func readWindowsProbeResult(decoder *json.Decoder, target *windowsProbeResult) (
 			return stage, nil
 		}
 		switch frame.Stage {
-		case "probe_entry", "sandbox_ready", "request_read":
+		case "probe_entry", "sandbox_ready", "request_read", "file_checks", "network_checks", "child_check", "parent_handle_check", "staging_checks", "registry_check", "memory_check", "impersonation_check", "result_write":
 			stage = frame.Stage
 		default:
 			return stage, errors.New("invalid probe stage")
@@ -189,6 +211,33 @@ func windowsProbeErrorKind(err error) string {
 		return "invalid_json"
 	}
 	return "other"
+}
+func probeNativeChildDenied() bool {
+	executable, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	// The pinned staged image is already known readable/executable by this token;
+	// a system command could fail for unrelated image/loader permissions.
+	image, err := windows.UTF16PtrFromString(executable)
+	if err != nil {
+		return false
+	}
+	command, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{executable, "--miaoyin-child-native-control"}))
+	if err != nil {
+		return false
+	}
+	startup := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
+	var process windows.ProcessInformation
+	err = windows.CreateProcess(image, command, nil, nil, false, windows.CREATE_NO_WINDOW, nil, nil, &startup, &process)
+	if err == nil {
+		windows.TerminateProcess(process.Process, 1)
+		windows.WaitForSingleObject(process.Process, windows.INFINITE)
+		windows.CloseHandle(process.Thread)
+		windows.CloseHandle(process.Process)
+		return false
+	}
+	return errors.Is(err, windows.ERROR_CHILD_PROCESS_BLOCKED) || errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_NOT_ENOUGH_QUOTA)
 }
 func probePipeImpersonationDenied() bool {
 	runtime.LockOSThread()

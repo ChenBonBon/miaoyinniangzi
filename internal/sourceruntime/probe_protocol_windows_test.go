@@ -10,6 +10,11 @@ import (
 )
 
 func TestWindowsProbeProtocolDiagnostics(t *testing.T) {
+	var body windowsProbeResult
+	if stage, err := readWindowsProbeResult(json.NewDecoder(strings.NewReader("{\"Stage\":\"file_checks\"}\n{\"Stage\":\"child_check\"}\n{\"Stage\":\"memory_check\"}\n{\"Failure\":\"Windows source sandbox: native probe panic stage=memory_check\"}\n")), &body); err != nil || stage != "memory_check" || body.Failure == "" {
+		t.Fatal("test-body failure stage lost")
+	}
+
 	var result windowsProbeResult
 	stage, err := readWindowsProbeResult(json.NewDecoder(strings.NewReader("{\"Stage\":\"probe_entry\"}\n{\"Stage\":\"sandbox_ready\"}\n{\"Ready\":true}\n")), &result)
 	if err != nil || stage != "sandbox_ready" || !result.Ready {

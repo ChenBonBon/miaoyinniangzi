@@ -39,12 +39,12 @@ go test -count=1 -v -ldflags="-H=windowsgui" ./internal/sourceruntime
 - 每次原生边界测试先在普通可信、无脚本子进程中运行同一 AFD 探针；必须连接父进程真实监听器，且父进程实际 accept，不能仅凭 API 返回值宣称成功。该对照子进程有独立 5 秒期限。对照失败则不继续宣称隔离通过。
 - 受限进程对 TCP loopback 及固定公网 `1.1.1.1:443` 的相同探针必须得到明确的内核访问拒绝；其他结果均失败。公开连接只发起 TCP 握手，不发 HTTP、媒体请求或身份数据。Go `net`/Winsock 的初始化缓存不参与这个判断。Winsock 对照和最小环境/系统资源数字诊断仅保留在测试二进制，不再是生产启动依赖。
 - AFD 为 Windows 私有 ABI；结构大小、EA 内容、指针宽度和 sockaddr 偏移有测试/运行时断言。普通进程正向对照和受限进程拒绝对照必须在支持的 Windows 实机上共同通过；不能凭交叉编译宣布可用。接口改变或返回未知错误时拒绝，不改能力/ACL 兜底。
-- 子进程启动、读取/复制父进程句柄被拒；额外可继承事件句柄未泄漏；stdin 管道不能 impersonate 成可授权访问的普通 broker 令牌。
+- 子进程启动用原生 CreateProcess 尝试启动已知可读/执行的同一固定 helper，而不是依赖 Go os/exec 或系统 cmd 的加载权限；仅接受明确的 child-policy/访问拒绝/Job quota 错误，任何创建成功均失败并立即终止。读取/复制父进程句柄被拒；额外可继承事件句柄未泄漏；stdin 管道不能 impersonate 成可授权访问的普通 broker 令牌。
 - 超过 Job 提交内存的原生分配被拒、无限持有的内存任务及原生 CPU 死循环被回收；拒绝无容器/Job 的直接 worker 调用。
 - 真实杀死独立 broker 后，worker 随 Job 自动退出，不依赖 Go defer 或前端退出事件。
 - 离线检查、父进程伪造网络 RPC、取消、异常脱敏及输入输出上限在 Windows 真进程中运行，而不再跳过正向协议测试。
 
-若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中；令牌失败时还输出 elevation、完整性 RID、AppContainer/LPAC 标志、capability 数量与预期 SID 是否匹配。只输出数字/布尔状态，不输出 SID 正文、源脚本、路径或密钥。进程无正常结果时还保留 `before_entry` / `probe_entry` / `sandbox_ready` / `request_read` 固定阶段、分类后的管道读写错误和十六进制退出码；不输出原始 stderr。网络预检失败保留目标类别（loopback/public）、固定阶段（open/bind/connect/setup）、是否连接成功和数字 NTSTATUS，不把超时/连接被拒绝当作访问拒绝。请保留这些诊断，不以移除 LPAC/Job 来排查。
+若启动失败，原生测试只输出固定阶段、`win32=数字`、Windows 内核 build/架构及父进程是否在 Job 中；令牌失败时还输出 elevation、完整性 RID、AppContainer/LPAC 标志、capability 数量与预期 SID 是否匹配。只输出数字/布尔状态，不输出 SID 正文、源脚本、路径或密钥。进程无正常结果时还保留 `before_entry` / `probe_entry` / `sandbox_ready` / `request_read` 及文件、网络、子进程、句柄、暂存目录、注册表、内存、impersonation 等测试体固定阶段、分类后的管道读写错误和十六进制退出码；不输出原始 stderr；测试体可恢复 panic 只返回固定失败阶段，不输出 panic 值、堆栈或异常文本。网络预检失败保留目标类别（loopback/public）、固定阶段（open/bind/connect/setup）、是否连接成功和数字 NTSTATUS，不把超时/连接被拒绝当作访问拒绝。请保留这些诊断，不以移除 LPAC/Job 来排查。
 
 通过后运行完整构建：
 
