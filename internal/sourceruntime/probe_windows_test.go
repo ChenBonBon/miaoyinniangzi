@@ -33,6 +33,7 @@ type windowsProbeRequest struct {
 	CPU                   bool
 }
 type windowsProbeResult struct {
+	Commit                                                                                                                                                                                                      *nativeCommitResult          `json:",omitempty"`
 	Bootstrap                                                                                                                                                                                                   *winsockBootstrapDiagnostics `json:",omitempty"`
 	Stage                                                                                                                                                                                                       string
 	Ready                                                                                                                                                                                                       bool
@@ -92,18 +93,8 @@ func windowsProbeMain() (exit int) {
 		}
 	}
 	if request.Memory {
-		// Touch committed pages, rather than just reserve address space.
-		var chunks [][]byte
-		for {
-			chunk := make([]byte, 16<<20)
-			for i := 0; i < len(chunk); i += 4096 {
-				chunk[i] = 1
-			}
-			chunks = append(chunks, chunk)
-			if len(chunks) > 64 {
-				return 4
-			}
-		}
+		stage("native_commit_check")
+		return nativeCommitProbeMain()
 	}
 	stage("file_checks")
 	_, readErr := os.ReadFile(request.Read)
@@ -176,7 +167,7 @@ func readWindowsProbeResult(decoder *json.Decoder, target *windowsProbeResult) (
 			return stage, nil
 		}
 		switch frame.Stage {
-		case "probe_entry", "sandbox_ready", "request_read", "file_checks", "network_checks", "child_check", "parent_handle_check", "staging_checks", "registry_check", "memory_check", "impersonation_check", "result_write":
+		case "probe_entry", "sandbox_ready", "request_read", "file_checks", "network_checks", "child_check", "parent_handle_check", "staging_checks", "registry_check", "memory_check", "native_commit_check", "impersonation_check", "result_write":
 			stage = frame.Stage
 		default:
 			return stage, errors.New("invalid probe stage")
@@ -412,6 +403,14 @@ func TestWindowsUncontainedWorkerRefusesScript(t *testing.T) {
 	}
 }
 func TestWindowsSandboxHardCommitLimit(t *testing.T) {
+	// First exclude host-wide allocation failure as the cause of rejection.
+	control, controlErr := windows.VirtualAlloc(0, jobMemoryLimit+commitProbeChunk, windows.MEM_RESERVE|windows.MEM_COMMIT, windows.PAGE_READWRITE)
+	if controlErr != nil || control == 0 {
+		t.Fatalf("ordinary commit control failed: code=%d", bootstrapErrorCode(controlErr))
+	}
+	if windows.VirtualFree(control, 0, windows.MEM_RELEASE) != nil {
+		t.Fatal("ordinary commit control cleanup failed")
+	}
 	executable, _ := os.Executable()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -425,18 +424,35 @@ func TestWindowsSandboxHardCommitLimit(t *testing.T) {
 		t.Fatal("memory probe input failed")
 	}
 	worker.input.Close()
-	done := make(chan error, 1)
-	go func() { _, _ = io.Copy(io.Discard, worker.output); done <- worker.wait() }()
-	select {
-	case err = <-done:
-		if err == nil {
-			t.Fatal("unbounded native memory allocation survived")
+	var result windowsProbeResult
+	var readErr, waitErr error
+	lastStage := "before_entry"
+	done := make(chan struct{}, 1)
+	go func() {
+		lastStage, readErr = readWindowsProbeResult(json.NewDecoder(io.LimitReader(worker.output, 4096)), &result)
+		if readErr != nil {
+			worker.kill()
 		}
+		waitErr = worker.wait()
+		done <- struct{}{}
+	}()
+	select {
+	case <-done:
 	case <-ctx.Done():
 		worker.kill()
 		<-done
-		t.Fatal("native allocation was not stopped by job limits")
+		t.Fatalf("native commit probe timed out: stage=%s", lastStage)
 	}
+	if strings.HasPrefix(result.Failure, "Windows source sandbox: ") {
+		t.Fatal(result.Failure)
+	}
+	if readErr != nil || waitErr != nil {
+		t.Fatalf("native commit probe failed: stage=%s read=%s wait=%s", lastStage, windowsProbeErrorKind(readErr), windowsProbeErrorKind(waitErr))
+	}
+	if !validCommitResult(result.Commit) {
+		t.Fatalf("native commit rejection/accounting invalid: %+v", result.Commit)
+	}
+	t.Logf("native commit denied near Job limit: %+v", *result.Commit)
 }
 
 func TestWindowsSandboxHardCPULimit(t *testing.T) {

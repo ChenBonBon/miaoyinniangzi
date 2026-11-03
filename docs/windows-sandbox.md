@@ -40,7 +40,7 @@ go test -count=1 -v -ldflags="-H=windowsgui" ./internal/sourceruntime
 - 受限进程对 TCP loopback 及固定公网 `1.1.1.1:443` 的相同探针必须得到明确的内核访问拒绝；其他结果均失败。公开连接只发起 TCP 握手，不发 HTTP、媒体请求或身份数据。Go `net`/Winsock 的初始化缓存不参与这个判断。Winsock 对照和最小环境/系统资源数字诊断仅保留在测试二进制，不再是生产启动依赖。
 - AFD 为 Windows 私有 ABI；结构大小、EA 内容、指针宽度和 sockaddr 偏移有测试/运行时断言。普通进程正向对照和受限进程拒绝对照必须在支持的 Windows 实机上共同通过；不能凭交叉编译宣布可用。接口改变或返回未知错误时拒绝，不改能力/ACL 兜底。
 - 子进程启动用原生 CreateProcess 尝试启动已知可读/执行的同一固定 helper，而不是依赖 Go os/exec 或系统 cmd 的加载权限；仅接受明确的 child-policy/访问拒绝/Job quota 错误，任何创建成功均失败并立即终止。读取/复制父进程句柄被拒；额外可继承事件句柄未泄漏：父进程在发送测试请求前只读查询低箱进程的 `ProcessHandleInformation` 快照（不要求低箱额外具备句柄枚举权限），搜索对应值与继承属性，不对本应无效的候选值调用 SetEvent/CloseHandle/GetHandleInformation；保留严格句柄检查，避免测试自己触发不可恢复的无效句柄异常。普通进程正向对照验证快照确能发现可继承事件、区分清除继承标志后的事件，并安全搜索任意无效值；stdin 管道不能 impersonate 成可授权访问的普通 broker 令牌。
-- 超过 Job 提交内存的原生分配被拒、无限持有的内存任务及原生 CPU 死循环被回收；拒绝无容器/Job 的直接 worker 调用。
+- 提交内存压力测试使用 `VirtualAlloc` 持续保留 16MiB 原生块并由 `RtlFillMemory` 触页，不使用受 Go GOMEMLIMIT/GC 影响的 `make`。普通进程先证明能分配超过 worker 限额的提交内存；worker 必须在接近 256MiB 的 Job/进程峰值时得到明确内存/提交配额拒绝，核对实际限额及 PrivateUsage/Job peak，并在释放原生块后返回数字报告。初始化失败、提前失败、未知错误、超额成功或超时均不算通过。Job 内存限制的语义是拒绝分配，不要求杀死进程；CPU 死循环仍须被 Job 终止。拒绝无容器/Job 的直接 worker 调用。
 - 真实杀死独立 broker 后，worker 随 Job 自动退出，不依赖 Go defer 或前端退出事件。
 - 离线检查、父进程伪造网络 RPC、取消、异常脱敏及输入输出上限在 Windows 真进程中运行，而不再跳过正向协议测试。
 
