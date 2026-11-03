@@ -14,6 +14,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "--miaoyin-afd-control-test" {
+		os.Exit(windowsAFDControlMain())
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--miaoyin-winsock-control-test" {
 		os.Exit(windowsWinsockControlMain())
 	}

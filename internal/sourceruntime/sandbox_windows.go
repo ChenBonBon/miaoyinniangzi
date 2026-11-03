@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const EngineVersion = "lx-inspect-win-lpac-v1"
+const EngineVersion = "lx-inspect-win-lpac-afd-v2"
 const containerName = "com.miaoyinniangzi.source.v1"
 const jobMemoryLimit = 256 * 1024 * 1024
 const jobCPUTime = 2 * 10000000 // Windows user CPU time, 100ns units.
@@ -157,19 +157,17 @@ func sandboxWorker() error {
 			return sandboxFailure("worker staging ACL")
 		}
 	}
-	// Verify actual WFP denial before accepting any script. An offline route or
-	// timeout is not evidence of isolation. No HTTP or source data is transmitted.
-	if err := initializeWorkerWinsock(); err != nil {
-		return err
-	}
+	// Probe AFD directly, without granting registryRead just to bootstrap Winsock.
+	// Require explicit kernel access denial, not initialization failure, an invalid
+	// ABI, an offline route or a timeout. No source data or HTTP is transmitted.
 	port, portErr := strconv.Atoi(os.Getenv(loopbackProbeEnvironment))
 	if portErr != nil || port < 1 || port > 65535 {
 		return sandboxFailure("worker network probe port")
 	}
 	for _, target := range []struct{ name, address string }{{"loopback", net.JoinHostPort("127.0.0.1", strconv.Itoa(port))}, {"public", "1.1.1.1:443"}} {
 		connected, networkErr := nativeTCPProbe(target.address)
-		if !errors.Is(networkErr, syscall.Errno(10013)) {
-			return sandboxFailure(fmt.Sprintf("worker network policy target=%s connected=%t", target.name, connected), networkErr)
+		if connected || !networkPolicyDenied(networkErr) {
+			return sandboxFailure(fmt.Sprintf("worker network policy target=%s connected=%t phase=%s", target.name, connected, afdFailurePhase(networkErr)), networkErr)
 		}
 	}
 
@@ -247,6 +245,11 @@ func sandboxFailure(stage string, causes ...error) error {
 	// Preserve only the machine-readable code, never cause.Error(): Windows
 	// errors can be wrapped in path/command strings and must stay out of logs.
 	if len(causes) > 0 {
+		var status windows.NTStatus
+		if errors.As(causes[0], &status) {
+			message += fmt.Sprintf(" (ntstatus=0x%08x)", uint32(status))
+			return errors.New(message)
+		}
 		var code syscall.Errno
 		if errors.As(causes[0], &code) && code != 0 {
 			message += fmt.Sprintf(" (win32=%d)", uint32(code))

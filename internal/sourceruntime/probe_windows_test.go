@@ -50,7 +50,7 @@ func windowsProbeMain() int {
 	}
 	if err := sandboxWorker(); err != nil {
 		result := windowsProbeResult{Failure: err.Error()}
-		if strings.HasPrefix(result.Failure, "Windows source sandbox: worker Winsock initialization") {
+		if strings.HasPrefix(result.Failure, "Windows source sandbox: worker network policy") {
 			diagnostics := inspectWinsockBootstrap()
 			result.Bootstrap = &diagnostics
 		}
@@ -97,7 +97,7 @@ func windowsProbeMain() int {
 	writeErr := os.WriteFile(request.Write, []byte("must-not-write"), 0600)
 	denied := func(address string) bool {
 		connected, err := nativeTCPProbe(address)
-		return !connected && errors.Is(err, syscall.Errno(10013)) // WSAEACCES, not a timeout/offline false positive.
+		return !connected && networkPolicyDenied(err) // Kernel access denial, not initialization failure or offline status.
 	}
 	system, _ := windows.GetWindowsDirectory()
 	childErr := exec.Command(filepath.Join(system, "System32", "cmd.exe"), "/c", "exit", "0").Run()
@@ -220,6 +220,7 @@ func probePipeImpersonationDenied() bool {
 }
 
 func TestWindowsSandboxNativeBoundaries(t *testing.T) {
+	requireNativeAFDControl(t)
 	version := windows.RtlGetVersion()
 	t.Logf("Windows kernel %d.%d build %d; arch=%s", version.MajorVersion, version.MinorVersion, version.BuildNumber, runtime.GOARCH)
 	var parentInJob uint32

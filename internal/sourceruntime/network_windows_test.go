@@ -21,11 +21,11 @@ func TestWindowsNativeNetworkProbeControl(t *testing.T) {
 		t.Fatal("control listener failed")
 	}
 	defer listener.Close()
-	connected, err := nativeTCPProbe(listener.Addr().String())
+	connected, err := winsockTCPReferenceProbe(listener.Addr().String())
 	if err != nil || !connected {
 		t.Fatal("native network control failed to connect to a live ordinary-process listener")
 	}
-	if connected, err = nativeTCPProbe("invalid-address"); err == nil || connected {
+	if connected, err = winsockTCPReferenceProbe("invalid-address"); err == nil || connected {
 		t.Fatal("invalid probe address accepted")
 	}
 }
