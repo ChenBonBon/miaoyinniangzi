@@ -57,7 +57,7 @@ Windows 上保留 Bun，安装 Go 和 WebView2 后，在仓库根目录执行：
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -Tests
 ```
 
-脚本使用冻结的 Bun 锁、固定 Wails CLI 和经过 SHA-256/PE 校验的 libmpv + Vulkan Loader，输出新的便携目录及 ZIP，不需要预装 Node/Python/7-Zip。详见 [Windows 构建与验收](docs/windows-testing.md)。**Windows AppContainer/LPAC + Job 音源隔离已接入开发构建，原生安全及真实播放/下载仍待验收；先运行 [沙箱原生测试](docs/windows-sandbox.md)，再测试个人源。任何隔离步骤失败仍拒绝执行，该包不是公开发行版本。**
+脚本使用冻结的 Bun 锁、固定 Wails CLI 和经过 SHA-256/PE 校验的 libmpv + Vulkan Loader，输出新的便携目录及 ZIP，不需要预装 Node/Python/7-Zip。详见 [Windows 构建与验收](docs/windows-testing.md)。**Windows x64 build 26200 的原生沙箱及完整音源运行时测试已由用户实测通过；完整便携包中的个人源播放、跳转、切歌、缓存和下载后文件播放也已通过。新环境仍须先运行 [沙箱原生测试](docs/windows-sandbox.md)，任何隔离步骤失败仍拒绝执行。真实外接盘和发行合规/签名/安装包尚未完成，该包不是公开发行版本。**
 
 ## 检查
 

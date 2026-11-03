@@ -1,6 +1,6 @@
 # 跨平台播放与音源隔离调研
 
-状态：后续已将 FLAC/MP3 统一接入 libmpv，真实源三档与本地打包进入 macOS 验收；当前实现见 [播放](playback.md)。本页保留初轮调研的实验边界。macOS 保留 Keychain；Windows 当前用户 DPAPI 已实现并交叉编译，Windows 真机按用户决定延期。
+状态：后续已将 FLAC/MP3 统一接入 libmpv，真实源三档与本地打包进入 macOS 验收；当前实现见 [播放](playback.md)。本页保留初轮调研的实验边界。macOS 保留 Keychain；Windows 当前用户 DPAPI 已实现；后续 Windows x64 build 26200 的原生音源运行时及完整便携包基础播放/缓存/下载链路已由用户实测通过，当前验收范围见 [Windows 记录](windows-testing.md)。
 
 ## 1. 系统密钥存储
 
@@ -81,7 +81,7 @@ PCM 使用 `ao=pcm` 导出并通过已知 chirp 的过零点估算实际内容�
 
 ### 初轮调研时尚未完成
 
-后续进展：统一后端、真实两首歌曲三档流式跳转、本地动态库打包现已接入，见 [播放记录](playback.md#验证)。Windows 真机、完整发行许可证/源码包、边缘网络与设备场景仍待后续。下列清单为初轮历史状态。
+后续进展：统一后端、真实两首歌曲三档流式跳转、本地动态库打包现已接入，见 [播放记录](playback.md#验证)。Windows x64 当前实机基础链路已有用户验收记录；完整发行许可证/源码包、其他系统、边缘网络与设备场景仍待后续。下列清单为初轮历史状态。
 
 - 两首真实歌曲通过“现有 Go 代理 → libmpv”链路的用户听感验收。
 - VBR MP3、缺失 Xing/索引、断网/慢网/过期、快速连续切歌、设备切换、休眠恢复、长时间资源释放。
@@ -92,7 +92,7 @@ PCM 使用 `ao=pcm` 导出并通过已知 chirp 的过零点估算实际内容�
 
 ## 3. Windows 的 Seatbelt 替代方案
 
-后续实现已接入独立 Go helper、AppContainer/LPAC、创建时 Job、句柄白名单和原生越权探针；Windows 实机安全验收仍待通过。当前细节与限制见 [Windows 沙箱](windows-sandbox.md)，下文保留初轮调研方案。
+后续实现已接入独立 Go helper、AppContainer/LPAC、创建时 Job、句柄白名单和原生越权探针；Windows x64 build 26200 的原生边界及完整运行时测试已由用户实测通过，不推广为所有系统/策略均已验收。当前细节与限制见 [Windows 沙箱](windows-sandbox.md)，下文保留初轮调研方案。
 
 Windows 没有同名 Seatbelt。建议仅把不可信音源 worker 放进 **AppContainer + Job Object**，主程序作为受控 broker，复用现有 JSONL、VM 限制及网络策略。不是把整个 Wails 主程序直接放进 AppContainer。
 
@@ -113,7 +113,7 @@ Windows 没有同名 Seatbelt。建议仅把不可信音源 worker 放进 **AppC
 - AppContainer 通常有自己的隔离存储及可读系统资源，不等价于当前 Seatbelt 的逐项 deny-default。需要检查存储、注册表、设备、现有 loopback 豁免与对象 ACL，不能宣传“零文件访问”。
 - 优先评估独立最小 `source-worker.exe`，避免把 Wails/WebView/native audio 的初始化和依赖带进容器。
 
-Windows 真机验收至少覆盖：读取密钥/数据库/桌面文件被拒；写入容器外被拒；直接访问公网/局域网/loopback 被拒；启动子进程被拒；继承多余句柄被拒；内存/CPU/超时后被回收；父进程崩溃 worker 被清理；正常脚本与父进程代发 HTTP 仍可用。当前环境只有 macOS，因此这些均是待实现/待验证项。
+Windows 真机验收至少覆盖：读取密钥/数据库/桌面文件被拒；写入容器外被拒；直接访问公网/局域网/loopback 被拒；启动子进程被拒；继承多余句柄被拒；内存/CPU/超时后被回收；父进程崩溃 worker 被清理；正常脚本与父进程代发 HTTP 仍可用。调研时环境只有 macOS，上述为初轮待验证清单；后续已完成的当前 Windows x64 实机测试范围与未测项见 [Windows 沙箱](windows-sandbox.md) 和 [Windows 验收](windows-testing.md)，不把此历史清单整体标为通过。
 
 ## 参考
 

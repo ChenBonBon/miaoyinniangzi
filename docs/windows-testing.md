@@ -1,6 +1,6 @@
 # Windows x64 构建与验收
 
-当前目标是开发验收便携包，不是公开发行安装包。基础构建与界面已由用户在 Windows 验证。新增 AppContainer/LPAC + Job 音源 worker 已接入开发构建，**原生隔离和真实源全链路仍待实机通过**；先按 `WINDOWS-SANDBOX.md`（源码中为 [Windows 沙箱](windows-sandbox.md)）运行原生测试，再导入个人音源。隔离初始化失败始终拒绝执行，不降级。
+当前目标是开发验收便携包，不是公开发行安装包。用户已在 Windows x64、内核 build 26200 验证原生沙箱边界和完整音源运行时测试，并确认完整便携包中的个人源导入/启用、真实播放、暂停/恢复、进度拖动、切歌、缓存，以及下载后文件播放通过。这里只记录该实机环境与上述操作，不推定其他 Windows 版本、设备或企业策略均可用。隔离初始化失败始终拒绝执行，不降级；新环境仍须先按 [Windows 沙箱](windows-sandbox.md) 运行原生测试。
 
 ## 1. 准备环境
 
@@ -61,7 +61,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 
 ## 3. 运行与反馈
 
-解压完整 ZIP，运行目录中的 `miaoyinniangzi.exe`。**不要只复制 EXE，也不要把 DLL 放进 System32。** 同目录应有 `miaoyin-source-worker.exe`、`libmpv-2.dll` 和 `vulkan-1.dll`。应用目录可以整体移动；下载目录仍按设置决定。
+解压完整 ZIP，运行目录中的 `miaoyinniangzi.exe`。**不要只复制 EXE，也不要把 DLL 放进 System32。** 同目录应有 `miaoyin-source-worker.exe`、`libmpv-2.dll` 和 `vulkan-1.dll`。应用目录可以整体移动；下载目录仍按设置决定。`build/bin` 根目录留下的主 EXE 不是完整便携包，可能没有相邻 DLL；本轮曾因此出现播放库缺失提示，改从完整 `windows-x64-*` 目录启动后用户确认播放通过。不要以搜索任意系统 DLL 路径来掩盖缺包。
 
 优先检查：
 
@@ -92,4 +92,4 @@ go run ./tools/windows_build verify
 go run ./tools/windows_build native
 ```
 
-本地环境只做了跨平台编译/PE 和哈希核验时，不算 Windows 实机验收。公开分发前还须完成 Windows 沙箱原生验收、实际音频/下载测试、应用许可证、全部第三方许可与 GPL 对应源码、签名及安装包。详见 `THIRD-PARTY-WINDOWS.md`。
+本地环境只做了跨平台编译/PE 和哈希核验时，不算 Windows 实机验收。已通过的当前实机基础验收不能替代公开分发准备。实际外接盘/exFAT、拔插/满盘、其他 Windows/设备/企业策略仍未验收；公开分发前还须完成应用许可证、全部第三方许可与 GPL 对应源码、签名及安装包。详见 `THIRD-PARTY-WINDOWS.md`。
