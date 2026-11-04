@@ -81,6 +81,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 
 macOS 和 Windows 均运行工作进程正向协议测试；Windows 额外运行原生越权探针和无容器直接调用必须拒绝的测试，不绕过沙箱。下载发布针对 NTFS 复用已删除文件名可能产生的创建时间隧道效应，通过已验证的原文件句柄恢复创建时间，再完整复核卷、文件 ID 与创建时间；不忽略身份字段，也不按哈希推断未知文件归属。若重命名后、身份时间恢复前中断，恢复仍保守拒绝不匹配目标，不覆盖文件。
 
+### FAT32/exFAT 发布元数据诊断
+
+用户在 FAT32 U 盘报告：下载结束出现最终音频且可播放，但严格发布身份校验拒绝完成。目前不能据此放宽文件 ID/创建时间或仅凭哈希认领文件，也不把它归因于空间不足。
+
+显式将 `MIAOYIN_DOWNLOAD_TEST_DIRECTORY` 设为该盘已有的可写目录后，可运行 `go test -count=1 -v -ldflags="-H=windowsgui" ./internal/downloads -run '^TestExternalWindowsPublicationIdentity$'`。仅在全新随机子目录内创建合成 part 文件，使用更长的合成 Unicode 目标名触发 FAT 长文件名目录项重排，调用当前发布路径并记录文件 ID/卷/创建时间是否相同、活句柄与最终路径是否一致、时间设置错误码和精确字节是否保留，随后清理自己的测试目录。不访问真实音源、不联网、不扫描已有音乐、不输出路径/序列号/标签，也不格式化或修改卷设置。结束后恢复该环境变量。
+
+该测试用于定位问题；报告 `synthetic publication rejected` 时不算外接盘验收通过。即使合成发布成功，也不能代替真实下载、重启恢复、拔插和满盘验收。
+
 ## 4. 依赖与构建限制
 
 依赖固定在 `tools/windows-dependencies.json`，不自动追踪 latest。7zr 官方地址为固定文件名，因此另固定其 26.04 字节 SHA-256，站点更新后校验会失败，不能静默执行新版。缓存校验失败应删除报错对应的 `build/deps/windows-x64/` 文件后重新下载，不跳过哈希检查。
