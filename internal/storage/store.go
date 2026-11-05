@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"miaoyinniangzi/internal/privatefs"
 	_ "modernc.org/sqlite"
@@ -20,8 +21,9 @@ const schemaVersion = 4
 // Store uses a single SQLite connection so transactions and connection pragmas
 // have predictable behavior. Callers must close it after stopping producers.
 type Store struct {
-	db       *sql.DB
-	defaults Settings
+	discoveryCacheMu sync.Mutex
+	db               *sql.DB
+	defaults         Settings
 }
 
 type Settings struct {
