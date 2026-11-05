@@ -83,11 +83,11 @@ macOS 和 Windows 均运行工作进程正向协议测试；Windows 额外运行
 
 ### FAT32/exFAT 发布元数据诊断
 
-用户在 FAT32 U 盘报告：下载结束出现最终音频且可播放，但严格发布身份校验拒绝完成。目前不能据此放宽文件 ID/创建时间或仅凭哈希认领文件，也不把它归因于空间不足。
+用户在 FAT32 U 盘报告：下载结束出现最终音频且可播放，但严格发布身份校验拒绝完成。后续实机合成探针确认：FileIndex 在重命名后改变，活句柄与新开目标的身份/路径一致，卷、创建时间及字节不变，时间回写成功。修复只在持有已验证且拒绝 delete-sharing 的源句柄完成原子 rename 后，对 FAT32 保存该句柄证明的最终身份；不是忽略 ID 或仅凭哈希认领。NTFS 保持严格路径。当前修复仍需真实 U 盘下载/恢复测试通过。
 
 显式将 `MIAOYIN_DOWNLOAD_TEST_DIRECTORY` 设为该盘已有的可写目录后，可运行 `go test -count=1 -v -ldflags="-H=windowsgui" ./internal/downloads -run '^TestExternalWindowsPublicationIdentity$'`。仅在全新随机子目录内创建合成 part 文件，使用更长的合成 Unicode 目标名触发 FAT 长文件名目录项重排，调用当前发布路径并记录文件 ID/卷/创建时间是否相同、活句柄与最终路径是否一致、时间设置错误码和精确字节是否保留，随后清理自己的测试目录。不访问真实音源、不联网、不扫描已有音乐、不输出路径/序列号/标签，也不格式化或修改卷设置。结束后恢复该环境变量。
 
-该测试用于定位问题；报告 `synthetic publication rejected` 时不算外接盘验收通过。即使合成发布成功，也不能代替真实下载、重启恢复、拔插和满盘验收。
+该测试用于定位问题；报告 `synthetic publication rejected` 时不算外接盘验收通过。修复后应同时运行 `TestExternalFilesystemDownload` 和 `TestExternalFilesystemPublicationRecovery`，覆盖合成整曲、同名保护、重复添加和最终记录写入失败后的离线恢复（仅使用本地合成媒体，不接触真实音源）。即使合成发布成功，也不能代替真实下载、重启恢复、拔插和满盘验收。
 
 ## 4. 依赖与构建限制
 

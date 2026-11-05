@@ -1,6 +1,7 @@
 package downloads
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,45 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func TestWindowsPublicationPinsSourceAgainstReplacement(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	file, err := root.OpenFile("source", os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	identity, err := identityOf(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := root.Open(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.Close()
+	wrong := identity
+	wrong.File++
+	if handle, err := openPublicationHandle(dir, "source", wrong); err == nil {
+		windows.CloseHandle(handle)
+		t.Fatal("unproven source accepted")
+	}
+	handle, err := openPublicationHandle(dir, "source", identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked := root.Rename("source", "moved")
+	windows.CloseHandle(handle)
+	if !errors.Is(blocked, windows.ERROR_SHARING_VIOLATION) {
+		t.Fatal("source could be moved while publication identity was pinned")
+	}
+	if err = root.Rename("source", "moved"); err != nil {
+		t.Fatal("ordinary rename control failed after releasing pin")
+	}
+}
 func TestWindowsPublicationRestoresTunneledCreationTimeWithoutRelaxingIdentity(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "part")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)

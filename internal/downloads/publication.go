@@ -33,40 +33,50 @@ func publish(root *os.Root, source, target string) error {
 	return publishFile(root, file, identity, source, target)
 }
 func publishFile(root *os.Root, file *os.File, identity fileIdentity, source, target string) error {
+	_, err := publishFileIdentity(root, file, identity, source, target)
+	return err
+}
+
+// Returns only an identity proven through the live exclusively-renamed source,
+// not one inferred from an unrelated target with matching content.
+func publishFileIdentity(root *os.Root, file *os.File, identity fileIdentity, source, target string) (fileIdentity, error) {
 	if !validPublicationName(source) || !validPublicationName(target) || source == target {
-		return ErrDownload
+		return fileIdentity{}, ErrDownload
 	}
 	before, err := file.Stat()
 	if err != nil || !before.Mode().IsRegular() {
-		return ErrDownload
+		return fileIdentity{}, ErrDownload
 	}
 	named, err := root.Lstat(source)
 	if err != nil || !named.Mode().IsRegular() || !os.SameFile(before, named) {
-		return ErrDownload
+		return fileIdentity{}, ErrDownload
 	}
 	dir, err := root.Open(".")
 	if err != nil {
-		return storageFailure(err)
+		return fileIdentity{}, storageFailure(err)
 	}
 	defer dir.Close()
-	if err = renameNoReplace(dir, source, target, identity); err != nil {
+	published, err := renameNoReplaceIdentity(dir, source, target, identity)
+	if err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return os.ErrExist
+			return fileIdentity{}, os.ErrExist
 		}
-		return storageFailure(err)
+		return fileIdentity{}, storageFailure(err)
 	}
 	targetFile, err := regular(root, target, false, false)
 	if err != nil {
-		return ErrPublishedChanged
+		return fileIdentity{}, ErrPublishedChanged
 	}
 	defer targetFile.Close()
 	actual, err := identityOf(targetFile)
-	if err != nil || actual != identity {
-		return ErrPublishedChanged
+	if err != nil || actual != published {
+		return fileIdentity{}, ErrPublishedChanged
 	}
-	// The caller's original open file remains valid after the rename.
 	if err = file.Sync(); err != nil {
-		return storageFailure(err)
+		return fileIdentity{}, storageFailure(err)
 	}
-	return syncPublishedDirectory(dir)
+	if err = syncPublishedDirectory(dir); err != nil {
+		return fileIdentity{}, err
+	}
+	return published, nil
 }

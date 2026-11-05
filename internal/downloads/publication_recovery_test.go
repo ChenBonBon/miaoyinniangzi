@@ -20,7 +20,9 @@ func failedPublication(t *testing.T, cause error) (*storage.Store, string, *fixt
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager.publish = func(*os.Root, *os.File, fileIdentity, string, string) error { return cause }
+	manager.publish = func(*os.Root, *os.File, fileIdentity, string, string) (fileIdentity, error) {
+		return fileIdentity{}, cause
+	}
 	tasks, err := manager.Add(oneSong(), dir, "320k")
 	if err != nil {
 		t.Fatal(err)

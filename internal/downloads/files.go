@@ -83,6 +83,33 @@ func verified(root *os.Root, name string, size int64, expected string) bool {
 	got, err := digest(file, size)
 	return err == nil && got == expected
 }
+
+// Verify ownership and bytes through one opened target, including a final
+// identity check after hashing. Matching bytes alone never authorize adoption.
+func verifiedIdentity(root *os.Root, name string, size int64, expected string, identity fileIdentity) bool {
+	if expected == "" || size <= 0 {
+		return false
+	}
+	file, err := regular(root, name, false, false)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	actual, err := identityOf(file)
+	if err != nil || actual != identity {
+		return false
+	}
+	stat, err := file.Stat()
+	if err != nil || stat.Size() != size {
+		return false
+	}
+	sum, err := digest(file, size)
+	if err != nil || sum != expected {
+		return false
+	}
+	actual, err = identityOf(file)
+	return err == nil && actual == identity
+}
 func safeText(text string) string {
 	text = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) || strings.ContainsRune(`<>:"/\|?*`, r) {

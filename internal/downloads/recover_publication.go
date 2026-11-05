@@ -38,7 +38,7 @@ func (m *Manager) recoverPublication(ctx context.Context, root *os.Root, r recor
 		}
 		target.Close()
 		if idErr == nil && identity == *r.Publication {
-			if !verified(root, r.Task.File, r.Task.Total, r.Digest) {
+			if !verifiedIdentity(root, r.Task.File, r.Task.Total, r.Digest, *r.Publication) {
 				return true, ErrPublishedChanged
 			}
 			dir, openErr := root.Open(".")
@@ -116,16 +116,31 @@ func (m *Manager) publishCompleted(ctx context.Context, root *os.Root, r record,
 		}
 		publisher := m.publish
 		if publisher == nil {
-			publisher = publishFile
+			publisher = publishFileIdentity
 		}
-		err = publisher(root, file, identity, partName(r.Task.ID), name)
+		published, publishErr := publisher(root, file, identity, partName(r.Task.ID), name)
+		err = publishErr
 		if os.IsExist(err) {
 			continue
 		}
 		if err != nil {
 			return err
 		}
-		if !verified(root, name, size, expected) {
+		if published.File == 0 || published.Volume != identity.Volume || published.Created != identity.Created || published.Modified != identity.Modified {
+			return ErrPublishedChanged
+		}
+		// Persist the identity returned by the proven live rename, never an identity
+		// freshly adopted from a merely hash-matching target. A crash before this save
+		// deliberately leaves recovery unable to claim a changed FAT32 directory ID.
+		if published != identity {
+			if err = m.update(r.Task.ID, func(value *record) { value.Publication = &published }); err != nil {
+				return err
+			}
+		}
+		if !directoryStillMounted(root, r.Task.Directory) {
+			return ErrDirectoryUnavailable
+		}
+		if !verifiedIdentity(root, name, size, expected, published) {
 			return ErrPublishedChanged
 		}
 		return m.finish(ctx, r.Task.ID, size)

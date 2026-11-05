@@ -31,7 +31,7 @@ type Manager struct {
 	sequence    int64
 	onDuplicate func()
 	// Native atomic publisher; tests can inject removable-volume failures.
-	publish func(*os.Root, *os.File, fileIdentity, string, string) error
+	publish func(*os.Root, *os.File, fileIdentity, string, string) (fileIdentity, error)
 	// A stopped worker may still be unwinding when its task is queued again.
 	restartID string
 }
