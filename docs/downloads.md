@@ -61,7 +61,7 @@ Go race 测试覆盖真实落盘、碰撞不覆盖、目录内去重/低档升�
 MIAOYIN_DOWNLOAD_TEST_DIRECTORY="/Volumes/你的磁盘" go test -v ./internal/downloads -run '^TestExternalFilesystemDownload$'
 ```
 
-该测试使用本地合成音频与本地 HTTP fixture，不接触真实音源或公网，验证整曲落盘、未知文件冲突保护、字节完整性、去重及临时名移除。默认跳过；本轮已在本地文件系统验证脚本，真实 exFAT/FAT/NTFS 需在对应卷执行。故障注入另覆盖磁盘不足/离线/不支持发布、断点外部修改、目录替换、成功记录写入失败后离线恢复及并发目标名竞争。`TestExternalFilesystemPublicationRecovery` 额外使用长合成标题、注入最终成功记录保存失败，再重新创建管理器并手动继续，验证最终身份已持久化、无需重新解析且字节不变；`TestExternalWindowsPublicationIdentity` 用于对比 FAT32 活句柄/目标身份。当前 FAT32 修复仍待这些测试在用户真实 U 盘共同通过，不能用本地 APFS 结果替代。
+该测试使用本地合成音频与本地 HTTP fixture，不接触真实音源或公网，验证整曲落盘、未知文件冲突保护、字节完整性、去重及临时名移除。默认跳过；已在本地文件系统及用户的真实 FAT32 U 盘执行；其他文件系统与设备仍需在对应卷执行。故障注入另覆盖磁盘不足/离线/不支持发布、断点外部修改、目录替换、成功记录写入失败后离线恢复及并发目标名竞争。`TestExternalFilesystemPublicationRecovery` 额外使用长合成标题、注入最终成功记录保存失败，再重新创建管理器并手动继续，验证最终身份已持久化、无需重新解析且字节不变；`TestExternalWindowsPublicationIdentity` 用于对比 FAT32 活句柄/目标身份。用户已在真实 FAT32 U 盘运行完整下载测试并确认全部通过，随后重建便携包并确认新任务真实下载完成、文件可播放。此结果不推广到其他设备或 exFAT，也不代表真实拔插、满盘或突然断电已验收；旧失败任务仍不自动认领。
 
 显式 `MIAOYIN_LIVE_DOWNLOAD=1 MIAOYIN_SOURCE_TEST_PATH=... go test -tags source_live -v ./internal/sourceruntime -run '^TestProvidedDownloadLive$'` 进行真实音源整曲下载和原子发布测试，默认跳过以免消耗额度与流量；已分别通过 FLAC、320K、128K 测试（`MIAOYIN_DOWNLOAD_TEST_QUALITY` 选择档位），不输出地址或识别性元数据。
 

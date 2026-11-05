@@ -64,7 +64,7 @@ AppContainer/LPAC 不等于完全没有系统资源访问；系统 DLL、必要�
 
 复制仅含公开 EXE。父进程崩溃可能留下 staging 目录，最多接受 16 个该前缀目录/至多 64 个 profile 根条目，超限拒绝，不擅自删除另一个运行实例的文件。开发阶段如遇 `staging directory limit`，先完全退出应用与测试进程，再检查这个专用 profile 下遗留的 `miaoyin-worker-*`；不要删除应用数据库、DPAPI 文件或音源副本。更完善的残留回收仍需后续实现与测试。
 
-当前实机已通过上述原生运行时和基础真实源链路；其他 Windows 版本、企业网络策略、不同账户权限、并发压力、抗病毒软件及更多源/音频设备兼容性仍需单独验证。真实外接盘/exFAT、拔插和满盘验收仍延期。不得通过删除 `sandboxWorker` 检查、授予网络 capabilities、增加 loopback 豁免、放宽文件 ACL 或禁用 Job 来通过测试。
+当前实机已通过上述原生运行时和基础真实源链路；其他 Windows 版本、企业网络策略、不同账户权限、并发压力、抗病毒软件及更多源/音频设备兼容性仍需单独验证。当前 FAT32 U 盘基础下载及合成恢复另已验收；exFAT、真实拔插、满盘和突然断电仍未验收。不得通过删除 `sandboxWorker` 检查、授予网络 capabilities、增加 loopback 豁免、放宽文件 ACL 或禁用 Job 来通过测试。
 
 ## API 依据
 
