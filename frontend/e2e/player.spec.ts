@@ -46,7 +46,7 @@ async function setup(page: Page) {
       detailRequests: [] as string[],
       detailPending: [] as (()=>void)[],
       layoutMode: 'normal',
-      discoveryMode: 'normal',
+      discoveryMode: localStorage.getItem('discovery-fixture-mode') || 'normal',
       discoveryCalls: [] as string[],
       discoveryCancels: [] as string[],
       discoveryPending: [] as (() => void)[],
@@ -91,6 +91,7 @@ async function setup(page: Page) {
             CancelMusicDetail: async () => true,
             GetDiscoveryPreferences: async () => { if(localStorage.getItem('layout-read-error'))throw Error('read failed');return JSON.parse(localStorage.getItem('discovery-layout') || '{"groups":[]}') },
             SaveDiscoveryPreferences: async (value: unknown) => { if(state.layoutMode==='error')throw Error('save failed');state.layoutWrites.push(value);localStorage.setItem('discovery-layout',JSON.stringify(value)) },
+            GetDiscoverySnapshot: async (kind:string,id:number,period:string) => JSON.parse(localStorage.getItem('discovery-cache-fixture') || '{}')[`${kind}:${id}:${period}`] || {savedAt:0},
             GetDiscoveryCatalog: async (kind: string) => {
               state.discoveryCalls.push('catalog:' + kind)
               if (state.discoveryMode === 'error') throw Error('QQ 音乐暂时无法提供推荐内容，请稍后重试')
@@ -714,6 +715,44 @@ test('late detail replies cannot undo navigation or replace another entity', asy
   expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares)).toEqual([])
 })
 
+test('persisted recommendations remain usable after reload and failed catalog or collection refresh', async ({page}) => {
+  await setup(page)
+  await page.evaluate(() => {
+    const entry={kind:'chart',id:1,title:'缓存榜单',group:'缓存分组',coverUrl:'',period:'2026_43',updated:'',total:1}
+    const song={...Reflect.get(window,'playerTest').testSongs[0],id:'CachedSong',title:'缓存曲目'}
+    localStorage.setItem('discovery-cache-fixture',JSON.stringify({'chart:0:':{savedAt:Date.now()-600000,catalog:{kind:'chart',entries:[entry]}},'chart:1:2026_43':{savedAt:Date.now()-600000,collection:{entry,songs:[song]}}}))
+    localStorage.setItem('discovery-fixture-mode','error')
+  })
+  await page.reload()
+  await expect(page.getByRole('button',{name:'查看 缓存榜单',exact:true})).toBeVisible()
+  await expect(page.getByText('更新未完成，已保留上次内容')).toBeVisible()
+  await page.getByRole('button',{name:'查看 缓存榜单',exact:true}).click()
+  await expect(page.getByRole('table')).toContainText('缓存曲目')
+  await expect(page.getByText('更新未完成，已保留上次内容')).toBeVisible()
+  await expect(page.getByRole('button',{name:'播放全部',exact:true})).toBeEnabled()
+  expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares)).toEqual([])
+  expect(await page.evaluate(()=>Reflect.get(window,'playerTest').downloadEnqueues)).toBe(0)
+  await page.screenshot({path:'test-results/discovery-cache-refresh-error.png'})
+  await page.setViewportSize({width:640,height:620})
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(640)
+  await page.screenshot({path:'test-results/discovery-cache-refresh-error-compact.png'})
+  await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryMode='normal')
+  await page.getByRole('button',{name:'重试更新',exact:true}).click()
+  await expect(page.getByRole('table')).toContainText('推荐歌曲0')
+  await expect(page.getByText('更新未完成，已保留上次内容')).toHaveCount(0)
+})
+
+test('fresh persisted recommendation catalog avoids an automatic QQ request but explicit refresh requests once', async ({page}) => {
+  await setup(page)
+  await page.evaluate(()=>localStorage.setItem('discovery-cache-fixture',JSON.stringify({'chart:0:':{savedAt:Date.now(),catalog:{kind:'chart',entries:[{kind:'chart',id:1,title:'缓存榜单',group:'缓存分组',coverUrl:'',period:'2026_43',updated:'',total:1}]}}})))
+  await page.reload()
+  await expect(page.getByRole('button',{name:'查看 缓存榜单',exact:true})).toBeVisible()
+  expect(await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryCalls)).toEqual([])
+  await page.getByRole('button',{name:'刷新',exact:true}).click()
+  await expect(page.getByRole('button',{name:'查看 榜单1',exact:true})).toBeVisible()
+  expect(await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryCalls)).toEqual(['catalog:chart'])
+})
+
 test('recommendation adjustments persist group and chart visibility and both sorting levels', async ({page}) => {
   await setup(page)
   await page.getByRole('button',{name:'调整',exact:true}).click()
@@ -938,10 +977,11 @@ test('discovery errors are not empty catalogs and stale responses cannot undo na
   await expect(page.getByRole('button',{name:'查看 榜单1',exact:true})).toBeVisible()
   await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryMode='error')
   await page.getByRole('button',{name:'刷新',exact:true}).click()
-  await expect(page.getByText('暂时无法读取推荐',{exact:true})).toBeVisible()
+  await expect(page.getByText('更新未完成，已保留上次内容',{exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'查看 榜单1',exact:true})).toBeVisible()
   await expect(page.getByText('暂时没有推荐列表',{exact:true})).toHaveCount(0)
   await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryMode='empty')
-  await page.getByRole('button',{name:'重试推荐',exact:true}).click()
+  await page.getByRole('button',{name:'重试更新',exact:true}).click()
   await expect(page.getByText('暂时没有推荐列表',{exact:true})).toBeVisible()
   await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryMode='pending')
   await page.getByRole('button',{name:'刷新',exact:true}).click()

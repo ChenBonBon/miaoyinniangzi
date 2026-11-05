@@ -18,7 +18,7 @@ macOS 本地音乐播放器，使用 Wails v2 + Svelte 5 + TypeScript + shadcn-s
 
 已实现音源本地导入、AES-GCM 加密副本、Keychain 密钥保管、内容去重与确认删除，详见 [音源导入](docs/sources.md)。导入成功后自动在隔离进程中离线校验（含重复导入），可手动重新校验；不自动启用。已支持单选启用、禁用和重启恢复，详见 [音源运行器](docs/source-runtime.md)。
 
-已支持 QQ 搜索、音源解析及统一 libmpv 的 FLAC/MP3 流式播放、队列与暂停恢复，详见 [播放](docs/playback.md)。已接入 [播放详情与逐行歌词](docs/lyrics.md) 和 [三槽播放缓存](docs/cache-plan.md)（当前完整后台缓冲、邻曲前缀与原生预热），以及 [播放队列面板](docs/queue.md)（点选、移除、清空与下一首播放）。[推荐榜单](docs/discovery.md) 已接通真实目录与完整曲目列表，并支持自定义分组/榜单的显隐和顺序；[歌手与专辑详情](docs/music-details.md) 已接通真实元数据、热门歌曲和完整专辑曲目。macOS 已支持[关闭隐藏、Dock 恢复及真正退出](docs/window-lifecycle.md)。用户提供的音源脚本未复制进项目。
+已支持 QQ 搜索、音源解析及统一 libmpv 的 FLAC/MP3 流式播放、队列与暂停恢复，详见 [播放](docs/playback.md)。已接入 [播放详情与逐行歌词](docs/lyrics.md) 和 [三槽播放缓存](docs/cache-plan.md)（当前完整后台缓冲、邻曲前缀与原生预热），以及 [播放队列面板](docs/queue.md)（点选、移除、清空与下一首播放）。[推荐榜单](docs/discovery.md) 已接通真实目录与完整曲目列表，并支持自定义分组/榜单的显隐和顺序、成功元数据的重启缓存及后台更新，刷新失败保留上次内容；[歌手与专辑详情](docs/music-details.md) 已接通真实元数据、热门歌曲和完整专辑曲目。macOS 已支持[关闭隐藏、Dock 恢复及真正退出](docs/window-lifecycle.md)。用户提供的音源脚本未复制进项目。
 
 ## 前端预览
 
