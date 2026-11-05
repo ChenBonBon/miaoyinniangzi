@@ -75,6 +75,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 
 有错误请提供：Windows 版本、`go version` / `bun --version`、失败步骤、完整的非敏感报错、DLL 是否齐全。不要提供音源脚本、密钥、签名音乐地址、数据库或含识别性音乐信息的日志。
 
+### QQ 推荐超时的脱敏采样
+
+新版本在推荐真实请求中记录阶段耗时（缓存命中不制造网络日志），具体字段含义见 [推荐诊断](discovery.md#wails-与诊断)。从最新完整便携包启动，在出现问题的推荐页面点一次刷新；不要调整超时、代理豁免或自动重试。随后只输出最近几条推荐的固定/数字字段：
+
+```powershell
+$log = Join-Path $env:APPDATA '妙音娘子\logs\qq-metadata.jsonl'
+if (Test-Path -LiteralPath $log) {
+    Get-Content -LiteralPath $log -Tail 80 |
+        ForEach-Object { try { $_ | ConvertFrom-Json -ErrorAction Stop } catch {} } |
+        Where-Object { $_.operation -in @('discovery_catalog', 'discovery_collection') -and $_.timing } |
+        Select-Object -Last 6 -Property operation,result,duration_ms,http_status,timing |
+        ConvertTo-Json -Depth 4
+} else {
+    Write-Host '尚未生成诊断，请先在推荐页面手动刷新一次。'
+}
+```
+
+只提供上述输出，不上传整个日志目录、数据库、音源脚本或播放地址。缺少新 `timing` 字段通常表示旧日志/旧程序或只有缓存命中；请先确认运行最新包。阶段数据可帮助区分 DNS、连接、TLS、等首字节、正文和分页预算耗尽，但不能仅凭一次结果断言 QQ 风控、服务器负载或代理问题。
+
 ## Windows 测试的平台边界
 
 私有数据库、缓存和日志在 Windows 使用当前用户与 SYSTEM 的 DACL，测试直接检查 ACL，不以 `os.FileMode` 的 POSIX 权限位判断 Windows 隐私。普通用户缺少符号链接权限时，只跳过相应子测试；可选启用 Windows 开发者模式后重跑，无需以管理员身份运行应用。打开的 `os.Root` 在 Windows 上可由系统禁止目录重命名，测试把这种明确的 sharing violation 作为更强的目录固定保护验证，其他错误仍然失败。

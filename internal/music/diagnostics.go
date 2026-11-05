@@ -14,17 +14,18 @@ const diagnosticLimit = 64 * 1024
 // Only fixed operation/result names and numeric protocol fields reach disk.
 // Never pass request URLs, headers, queries, bodies or raw error messages here.
 type diagnostic struct {
-	Time        string `json:"time"`
-	Operation   string `json:"operation"`
-	DurationMS  int64  `json:"duration_ms"`
-	HTTPStatus  int    `json:"http_status,omitempty"`
-	Result      string `json:"result"`
-	Code        *int   `json:"code,omitempty"`
-	RequestCode *int   `json:"request_code,omitempty"`
-	DataCode    *int   `json:"data_code,omitempty"`
-	MetaRet     *int   `json:"meta_ret,omitempty"`
-	Filter      *int   `json:"filter,omitempty"`
-	Subcode     *int   `json:"subcode,omitempty"`
+	Timing      *requestTiming `json:"timing,omitempty"`
+	Time        string         `json:"time"`
+	Operation   string         `json:"operation"`
+	DurationMS  int64          `json:"duration_ms"`
+	HTTPStatus  int            `json:"http_status,omitempty"`
+	Result      string         `json:"result"`
+	Code        *int           `json:"code,omitempty"`
+	RequestCode *int           `json:"request_code,omitempty"`
+	DataCode    *int           `json:"data_code,omitempty"`
+	MetaRet     *int           `json:"meta_ret,omitempty"`
+	Filter      *int           `json:"filter,omitempty"`
+	Subcode     *int           `json:"subcode,omitempty"`
 }
 
 type Diagnostics struct {
@@ -66,6 +67,7 @@ func (d *Diagnostics) record(event diagnostic, started time.Time, err error) {
 	event.Time = time.Now().UTC().Format(time.RFC3339Nano)
 	event.DurationMS = time.Since(started).Milliseconds()
 	event.Result = diagnosticResult(err)
+	event.Timing = sanitizeTiming(event.Timing)
 	line, err := json.Marshal(event)
 	if err != nil {
 		return

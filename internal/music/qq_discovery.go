@@ -48,12 +48,13 @@ func chartEntry(info chartInfo, group string) (DiscoveryEntry, bool) {
 func (c *QQClient) discoveryRequest(ctx context.Context, operation, module, method string, param any, target any) (err error) {
 	started := time.Now()
 	event := diagnostic{Operation: operation}
-	defer func() { c.diagnostics.record(event, started, err) }()
+	trace := traceRequest(ctx, c.diagnostics != nil, module, method, c.http.Timeout)
+	defer func() { event.Timing = trace.finish(err); c.diagnostics.record(event, started, err) }()
 	payload, err := json.Marshal(map[string]any{"comm": map[string]any{"ct": 24, "cv": 0, "uin": 0, "format": "json"}, "req_1": map[string]any{"module": module, "method": method, "param": param}})
 	if err != nil {
 		return ErrResponse
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
+	request, err := http.NewRequestWithContext(trace.context(ctx), http.MethodPost, c.endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return ErrNetwork
 	}
@@ -63,9 +64,11 @@ func (c *QQClient) discoveryRequest(ctx context.Context, operation, module, meth
 	request.Header.Set("User-Agent", "Miaoyin/0.1 (music metadata)")
 	response, err := c.http.Do(request)
 	if err != nil {
+		trace.networkFailure(ctx, err)
 		return networkError(ctx, err)
 	}
 	defer response.Body.Close()
+	trace.setStage("headers")
 	event.HTTPStatus = response.StatusCode
 	switch response.StatusCode {
 	case 429:
@@ -76,13 +79,17 @@ func (c *QQClient) discoveryRequest(ctx context.Context, operation, module, meth
 	default:
 		return ErrResponse
 	}
+	trace.setStage("body")
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+	trace.bodyBytes(len(data))
 	if err != nil {
+		trace.networkFailure(ctx, err)
 		return networkError(ctx, err)
 	}
 	if len(data) > maxResponseBytes {
 		return ErrResponse
 	}
+	trace.setStage("decode")
 	var envelope struct {
 		Code    *int `json:"code"`
 		Request *struct {
@@ -93,6 +100,7 @@ func (c *QQClient) discoveryRequest(ctx context.Context, operation, module, meth
 	if json.Unmarshal(data, &envelope) != nil || envelope.Code == nil {
 		return ErrResponse
 	}
+	trace.setStage("validate")
 	event.Code = envelope.Code
 	if envelope.Request != nil {
 		event.RequestCode = envelope.Request.Code
@@ -106,9 +114,11 @@ func (c *QQClient) discoveryRequest(ctx context.Context, operation, module, meth
 	if *envelope.Request.Code != 0 {
 		return ErrRestricted
 	}
+	trace.setStage("decode")
 	if len(envelope.Request.Data) == 0 || string(envelope.Request.Data) == "null" || json.Unmarshal(envelope.Request.Data, target) != nil {
 		return ErrResponse
 	}
+	trace.setStage("validate")
 	return nil
 }
 func (c *QQClient) DiscoveryCatalog(ctx context.Context, kind string) (DiscoveryCatalog, error) {
@@ -251,7 +261,7 @@ func (c *QQClient) DiscoveryCollection(ctx context.Context, kind string, id int,
 			Chart *chartInfo `json:"data"`
 			Songs *[]rawSong `json:"songInfoList"`
 		}
-		err := c.discoveryRequest(ctx, "discovery_collection", "musicToplist.ToplistInfoServer", "GetDetail", map[string]any{"topid": id, "num": 100, "offset": offset, "period": period}, &data)
+		err := c.discoveryRequest(discoveryPage(ctx, offset/100+1), "discovery_collection", "musicToplist.ToplistInfoServer", "GetDetail", map[string]any{"topid": id, "num": 100, "offset": offset, "period": period}, &data)
 		if err != nil {
 			return result, err
 		}
