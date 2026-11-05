@@ -66,6 +66,9 @@ func (a *App) GetDiscoveryCatalog(kind, requestID string) (music.DiscoveryCatalo
 	}
 	defer cleanup()
 	result, err := reader.DiscoveryCatalog(ctx, kind)
+	if err == nil && result.Kind == kind && music.ValidDiscoveryCatalogValue(result) {
+		a.saveDiscoverySnapshot(ctx, discoveryCacheKey(kind, 0, ""), result)
+	}
 	return result, discoveryError(err)
 }
 func (a *App) GetDiscoveryCollection(kind string, id int, period, requestID string) (music.DiscoveryCollection, error) {
@@ -78,6 +81,9 @@ func (a *App) GetDiscoveryCollection(kind string, id int, period, requestID stri
 	}
 	defer cleanup()
 	result, err := reader.DiscoveryCollection(ctx, kind, id, period)
+	if err == nil && result.Entry.Kind == kind && result.Entry.ID == id && (period == "" || result.Entry.Period == period) && music.ValidDiscoveryCollectionValue(result) {
+		a.saveDiscoverySnapshot(ctx, discoveryCacheKey(kind, id, period), result)
+	}
 	return result, discoveryError(err)
 }
 func (a *App) CancelDiscovery(requestID string) bool {
