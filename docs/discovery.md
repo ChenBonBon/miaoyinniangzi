@@ -50,6 +50,9 @@ QQ 新增分组默认追加到分组末尾，组内新增榜单默认追加在�
 
 ## Wails 与诊断
 
+用户当前反馈：正常联网使用未复现超时；此前诊断样本来自启动后主动断网、打开未缓存榜单并重试，不能据此判定正常联网时的上游故障或调整 HTTP 策略。保留缓存兜底与脱敏阶段诊断，不增加重试或改变限额。
+
+
 - `GetDiscoveryCatalog(kind, requestID)`
 - `GetDiscoveryCollection(kind, id, period, requestID)`
 - `CancelDiscovery(requestID)`

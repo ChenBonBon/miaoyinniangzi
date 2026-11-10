@@ -78,11 +78,7 @@ func protectContainerStorage(folder string, sid *windows.SID) error {
 		return sandboxFailure("profile identity path")
 	}
 
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		return errWindowsSandbox
-	}
-	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;" + user.User.Sid.String() + ")(A;OICI;GRGX;;;" + sid.String() + ")(A;OICI;RC;;;OW)")
+	descriptor, err := stageSecurityDescriptor(sid)
 	if err != nil {
 		return errWindowsSandbox
 	}
@@ -156,24 +152,35 @@ func stageWorker(ctx context.Context, source string) (stage *stagedExecutable, e
 	}
 	var directory windows.Handle
 	var pinned *os.File
+	var directoryIdentity stageIdentity
+	known := map[string]stageIdentity{}
+	var cleanupOnce sync.Once
 	name := ""
 	cleanup := func() {
-		if pinned != nil {
-			pinned.Close()
-		}
-		if directory != 0 {
-			windows.CloseHandle(directory)
-		}
-		if name != "" {
-			_ = root.RemoveAll(name)
-		}
-		root.Close()
+		cleanupOnce.Do(func() {
+			if pinned != nil {
+				pinned.Close()
+			}
+			if directory != 0 {
+				cleaned := cleanupOwnedStage(directory, directoryIdentity, known)
+				windows.CloseHandle(directory)
+				if cleaned {
+					deleteEmptyOwnedStage(root, name, directoryIdentity)
+				}
+			}
+			root.Close()
+		})
 	}
 	defer func() {
 		if err != nil {
 			cleanup()
 		}
 	}()
+	// Reap only proven, idle stages before enforcing the unchanged limits.
+	_ = reapStagedWorkers(ctx, root, sid)
+	if err = ctx.Err(); err != nil {
+		return nil, err
+	}
 	scan, err := root.Open(".")
 	if err != nil {
 		return nil, sandboxFailure("profile enumeration")
@@ -189,17 +196,13 @@ func stageWorker(ctx context.Context, source string) (stage *stagedExecutable, e
 			count++
 		}
 	}
-	// Abrupt parent termination can leave a public binary copy. Bound those copies
-	// and fail closed, rather than deleting another application's live worker.
+	// Live/unproven/legacy directories still count; collection never bypasses
+	// the limit by forgetting an unknown or currently occupied directory.
 	if count >= 16 {
 		return nil, sandboxFailure("staging directory limit")
 	}
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
-	if err != nil {
-		return nil, errWindowsSandbox
-	}
 	// OWNER RIGHTS prevents an implicit owner WRITE_DAC grant in the lowbox.
-	descriptor, err := windows.SecurityDescriptorFromString("D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;" + user.User.Sid.String() + ")(A;OICI;GRGX;;;" + sid.String() + ")(A;OICI;RC;;;OW)")
+	descriptor, err := stageSecurityDescriptor(sid)
 	if err != nil {
 		return nil, errWindowsSandbox
 	}
@@ -225,6 +228,10 @@ func stageWorker(ctx context.Context, source string) (stage *stagedExecutable, e
 		return nil, sandboxFailure("protected staging")
 	}
 	name = candidate
+	directoryIdentity, err = stageIdentityOf(directory, true)
+	if err != nil {
+		return nil, err
+	}
 	sourceName, err := windows.UTF16PtrFromString(source)
 	if err != nil {
 		return nil, errWindowsSandbox
@@ -256,6 +263,12 @@ func stageWorker(ctx context.Context, source string) (stage *stagedExecutable, e
 	if err != nil {
 		return nil, sandboxFailure("staged executable")
 	}
+	outputIdentity, idErr := stageIdentityOf(windows.Handle(output.Fd()), false)
+	if idErr != nil {
+		output.Close()
+		return nil, idErr
+	}
+	known["worker.exe"] = outputIdentity
 	digest := sha256.New()
 	written, copyErr := io.Copy(io.MultiWriter(output, digest), &workerContextReader{ctx, io.LimitReader(input, 256<<20+1)})
 	syncErr, closeErr := output.Sync(), output.Close()
@@ -277,6 +290,14 @@ func stageWorker(ctx context.Context, source string) (stage *stagedExecutable, e
 	size, pathErr := windows.GetFinalPathNameByHandle(targetHandle, &path[0], uint32(len(path)), 2) // VOLUME_NAME_NT, normalized.
 	if pathErr != nil || size == 0 || int(size) >= len(path) {
 		return nil, sandboxFailure("pinned image name")
+	}
+	executableIdentity, idErr := stageIdentityOf(targetHandle, false)
+	if idErr != nil {
+		return nil, idErr
+	}
+	manifest := stageManifest{Format: stageManifestFormat, Version: 1, Name: name, Directory: directoryIdentity, Executable: executableIdentity, Size: written, SHA256: hex.EncodeToString(check.Sum(nil))}
+	if err = writeStageManifest(root, name, manifest, known); err != nil {
+		return nil, err
 	}
 	return &stagedExecutable{path: executable, sid: sid, nativeName: windows.UTF16ToString(path[:size]), cleanup: cleanup}, nil
 }

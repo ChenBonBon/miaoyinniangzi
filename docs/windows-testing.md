@@ -75,6 +75,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 
 有错误请提供：Windows 版本、`go version` / `bun --version`、失败步骤、完整的非敏感报错、DLL 是否齐全。不要提供音源脚本、密钥、签名音乐地址、数据库或含识别性音乐信息的日志。
 
+### worker 异常残留回收
+
+新回收逻辑已接入；macOS 全项目 race/vet 与 Windows 全项目交叉编译/vet 已通过，**Windows 本节原生运行尚待用户验收**，不能用交叉编译替代。
+
+```powershell
+go test -count=1 -v -ldflags="-H=windowsgui" ./internal/sourceruntime
+```
+
+新增 `TestWindowsStage*` 和 `TestWindowsOwnedStage*` 用临时目录中的合成公开副本，验证活动目录保护、跨进程 owner 崩溃释放、运行中映像及恢复清单保护、已证明孤儿回收、部分副本清理、未知文件/旧无清单目录/变更字节/错误身份/ACL/重复 JSON 字段/重解析点/硬链接拒绝以及读取/取消预算。不需导入个人音源，不接触用户音乐目录，不需要管理员权限；仅符号链接用例可因未启用开发者模式而按既有规则跳过。全部通过后再构建完整便携包，确认个人源校验、播放与下载没有回归。
+
+完整协议与旧目录保留规则见 [Windows 沙箱](windows-sandbox.md)。不要通过清除未知目录或放宽 ACL 使测试通过。
+
 ### QQ 推荐超时的脱敏采样
 
 新版本在推荐真实请求中记录阶段耗时（缓存命中不制造网络日志），具体字段含义见 [推荐诊断](discovery.md#wails-与诊断)。从最新完整便携包启动，在出现问题的推荐页面点一次刷新；不要调整超时、代理豁免或自动重试。随后只输出最近几条推荐的固定/数字字段：
