@@ -14,6 +14,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && (os.Args[1] == "--miaoyin-stage-lease-test" || os.Args[1] == "--miaoyin-stage-image-test") {
+		os.Exit(windowsStageControlMain())
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--miaoyin-child-native-control" {
 		os.Exit(0)
 	}
