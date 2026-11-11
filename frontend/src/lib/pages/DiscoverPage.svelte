@@ -111,13 +111,10 @@
 
   <section aria-label={view.selected?.title || '推荐榜单'} aria-busy={view.status === 'loading' || view.refreshing}>
   {#if view.refreshing}<span class="sr-only" role="status">正在更新推荐，当前内容仍可使用</span>{/if}
-  {#if view.error && view.status === 'ready'}
-    <Alert.Root class="mb-6"><Alert.Title>更新未完成，已保留上次内容</Alert.Title><Alert.Description>{view.error}</Alert.Description><Button variant="outline" size="sm" class="mt-3 w-fit" disabled={view.refreshing} onclick={() => discoveryController.refresh()}>重试更新</Button></Alert.Root>
-  {/if}
   {#if view.status === 'loading' || view.status === 'idle' || !view.selected && (preferences.status === 'idle' || preferences.status === 'loading')}
     <div role="status" aria-label="正在读取 QQ 音乐推荐" class="flex flex-col gap-6">{#each [0, 1, 2, 3, 4, 5] as row (row)}<div class="flex items-center gap-4"><Skeleton class={view.selected ? 'size-10' : 'size-16'} /><div class="flex flex-1 flex-col gap-2"><Skeleton class="h-4 w-2/3" /><Skeleton class="h-3 w-1/3" /></div></div>{/each}</div>
   {:else if view.status === 'error'}
-    <Alert.Root variant="destructive"><Alert.Title>暂时无法读取推荐</Alert.Title><Alert.Description>{view.error}</Alert.Description><Button variant="outline" class="mt-3 w-fit" onclick={() => discoveryController.refresh()}>重试推荐</Button></Alert.Root>
+    <span class="sr-only">推荐内容尚未加载，可通过顶部刷新按钮重试。</span>
   {:else if view.selected}
     {#if songs.length}
       <SongTable songs={visible} {offset} onplay={index => playerController.playFrom(songs, offset + index)} />
