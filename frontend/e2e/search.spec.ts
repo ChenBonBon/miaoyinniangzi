@@ -112,7 +112,7 @@ test('clicking a suggestion and keyboard selection both navigate explicitly',asy
   await expect(page.getByRole('heading',{name:'「爱一生跟你走」的搜索结果',exact:true})).toBeVisible()
 })
 
-test('Escape, outside click, and Tab close suggestions without navigation or losing draft',async({page})=>{
+test('Escape, outside click, and Tab close suggestions without navigation or losing draft',async({page,browserName})=>{
   await openSearch(page)
   const input=page.getByRole('combobox')
   const list=page.getByRole('listbox',{name:'搜索提示'})
@@ -123,7 +123,15 @@ test('Escape, outside click, and Tab close suggestions without navigation or los
   await page.getByRole('heading',{name:'把时间交给音乐。'}).click();await expect(list).toHaveCount(0)
   await input.click();await expect(list).toBeVisible()
   await input.press('Tab');await expect(list).toHaveCount(0)
-  await expect(form(page).getByRole('button',{name:'搜索',exact:true})).toBeFocused()
+  await expect(input).toHaveValue('只想');await expect(input).not.toBeFocused()
+  const searchButton=form(page).getByRole('button',{name:'搜索',exact:true})
+  if(browserName==='webkit' && process.platform==='darwin' && !await searchButton.evaluate(element=>element===document.activeElement)){
+    // macOS WebKit's default Tab cycle skips buttons. Option-Tab includes
+    // all controls; respect full keyboard access when already enabled.
+    await input.focus();await expect(list).toBeVisible()
+    await input.press('Alt+Tab');await expect(list).toHaveCount(0)
+  }
+  await expect(searchButton).toBeFocused()
   await expect(page.getByRole('heading',{name:'把时间交给音乐。'})).toBeVisible()
   expect(await page.evaluate(()=>Reflect.get(window,'searchTest').calls.length)).toBe(0)
 })
