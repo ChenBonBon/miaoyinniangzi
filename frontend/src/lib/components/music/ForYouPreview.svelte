@@ -6,14 +6,14 @@
  import { forYouPreview as view,replacePreviewBatch,openPreviewAlbum } from '$lib/for-you-preview-state.svelte'
 </script>
 
-<section aria-labelledby="for-you-heading" class="mb-10">
+<section aria-labelledby="for-you-heading" class="@container/for-you mb-10">
  <div class="mb-4 flex items-center justify-between gap-4">
   <h2 id="for-you-heading" class="text-lg font-semibold">猜你喜欢</h2>
   <Button variant="outline" size="sm" onclick={replacePreviewBatch}><RefreshCw data-icon="inline-start" />换一批</Button>
  </div>
  <p id="for-you-preview-description" class="sr-only">静态预览，点击封面查看专辑，播放按钮暂不播放真实音乐。</p>
  <span class="sr-only" role="status">第 {view.batch} 批，共 {previewBatchSize} 首歌曲</span>
- <ul class="grid grid-cols-3 gap-3 md:gap-4" aria-label="猜你喜欢曲目">
+ <ul class="preview-grid grid grid-cols-3 gap-3 md:gap-4" aria-label="猜你喜欢曲目">
   {#each view.songs as song (song.id)}
    <li class="relative min-w-0" data-for-you-song={song.id}>
     <Button variant="ghost" class="relative aspect-square h-auto w-full overflow-hidden rounded-lg p-0 text-left whitespace-normal" aria-label={`查看${song.albumTitle}`} aria-describedby="for-you-preview-description" onclick={()=>openPreviewAlbum(song.id)}>
@@ -29,3 +29,9 @@
   {/each}
  </ul>
 </section>
+
+<style>
+ @container for-you (min-width:52rem){
+  .preview-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+ }
+</style>
