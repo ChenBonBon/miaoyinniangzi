@@ -77,7 +77,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build_windows.ps1 -T
 
 ### worker 异常残留回收
 
-新回收逻辑已接入；macOS 全项目 race/vet 与 Windows 全项目交叉编译/vet 已通过，**Windows 本节原生运行尚待用户验收**，不能用交叉编译替代。
+新回收逻辑已接入；macOS 全项目 race/vet 与 Windows 全项目交叉编译/vet 已通过。用户按本节第一阶段步骤反馈 Windows 原生测试通过，记录为当前用户环境的回收测试验收通过，不是以交叉编译替代原生运行。第二阶段新完整便携包的个人源校验、播放、下载及重启回归尚待明确反馈，不由这次简短测试反馈推断完成。
 
 ```powershell
 go test -count=1 -v -ldflags="-H=windowsgui" ./internal/sourceruntime
