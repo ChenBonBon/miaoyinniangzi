@@ -130,6 +130,8 @@ test('settings is lazy and renders all sections continuously without a page head
   await expect(mainNav(page).getByRole('button', { name:'搜索', exact:true })).toHaveCount(0)
   await expect(mainNav(page).getByRole('button', { name:'音源设置' })).toHaveCount(0)
   await mainNav(page).getByRole('button', { name:'设置', exact:true }).click()
+  await expect(categories(page).getByRole('link',{name:'外观',exact:true})).toHaveAttribute('aria-current','location')
+  await expect(page.getByRole('heading',{name:'外观',exact:true})).toBeInViewport()
   await expect(page.getByLabel('播放音质', { exact:true })).toBeVisible()
   await expect(page.getByRole('heading', { name:'设置', exact:true })).toHaveCount(0)
   await expect(page.locator('main header').getByRole('search')).toBeVisible()
