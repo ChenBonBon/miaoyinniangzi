@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { Music2, Download, Radio } from '@lucide/svelte'
+  import { Music2, Download, Radio, Palette } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { Skeleton } from '$lib/components/ui/skeleton'
   import { Separator } from '$lib/components/ui/separator'
   import * as Alert from '$lib/components/ui/alert'
+  import AppearanceSettings from './settings/AppearanceSettings.svelte'
   import PlaybackSettings from './settings/PlaybackSettings.svelte'
   import DownloadSettings from './settings/DownloadSettings.svelte'
   import SourceSettings from './settings/SourceSettings.svelte'
@@ -13,7 +14,7 @@
 
   import { refreshSources } from '$lib/source-state.svelte'
 
-  const categories = [{ name:'播放', id:'settings-playback', icon:Music2 }, { name:'下载', id:'settings-download', icon:Download }, { name:'音源', id:'settings-source', icon:Radio }] as const
+  const categories = [{ name:'外观', id:'settings-appearance', icon:Palette }, { name:'播放', id:'settings-playback', icon:Music2 }, { name:'下载', id:'settings-download', icon:Download }, { name:'音源', id:'settings-source', icon:Radio }] as const
   let content: HTMLDivElement
   let menu: HTMLElement
 
@@ -76,6 +77,8 @@
       <Alert.Root variant="destructive" class="mb-6"><Alert.Title>设置未完成</Alert.Title><Alert.Description>{settingsState.error}</Alert.Description></Alert.Root>
     {/if}
     {#if !settingsState.draft && !settingsState.loading}<Button variant="outline" class="mb-6" onclick={ensureSettings}>重新读取设置</Button>{/if}
+    <section id="settings-appearance" tabindex="-1" aria-label="外观设置" class="scroll-mt-14 rounded-lg outline-none lg:scroll-mt-8"><AppearanceSettings /></section>
+    <Separator class="my-12" />
     <section id="settings-playback" tabindex="-1" aria-label="播放设置" class="scroll-mt-14 rounded-lg outline-none lg:scroll-mt-8">
       {#if settingsState.draft}<PlaybackSettings />{:else}<h2 class="mb-8 text-xl font-semibold">播放</h2><Skeleton class="h-44 w-full" aria-label="播放设置尚未读取" />{/if}
     </section>

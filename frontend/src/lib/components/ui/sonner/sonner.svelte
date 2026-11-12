@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { mode } from "mode-watcher";
+	import { appearanceView } from "$lib/appearance-state.svelte";
 	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
 	import Loader2Icon from '@lucide/svelte/icons/loader-2';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
@@ -11,7 +11,7 @@
 </script>
 
 <Sonner
-	theme={mode.current}
+	theme={appearanceView.resolved}
 	class="toaster group"
 	style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
 	toastOptions={{

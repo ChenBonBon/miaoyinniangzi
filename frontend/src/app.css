@@ -6,6 +6,7 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
   font-synthesis: none;
+  color-scheme: dark;
   --radius: .625rem;
   --background: oklch(.18 0 0);
   --foreground: oklch(.94 0 0);
@@ -34,6 +35,24 @@
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: oklch(.985 0 0);
+  --foreground: oklch(.24 0 0);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --secondary: oklch(.94 0 0);
+  --muted: oklch(.94 0 0);
+  --muted-foreground: oklch(.44 0 0);
+  --accent: oklch(.925 0 0);
+  --destructive: oklch(.53 .2 25);
+  --border: oklch(.86 0 0);
+  --input: oklch(.60 0 0);
+  --ring: oklch(.52 .20 7);
+  --sidebar: oklch(.96 0 0);
+  --sidebar-accent: oklch(.90 0 0);
 }
 
 @theme inline {

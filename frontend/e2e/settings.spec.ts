@@ -37,6 +37,11 @@ async function mockBridge(page: Page) {
         state.sources = state.sources.map(source => ({ ...source, active:false }))
         return [...state.sources]
       },
+      GetDiscoveryCatalog: async () => ({kind:'chart',entries:[]}),
+      GetDiscoveryCollection: async () => {throw Error('no fixture collection')},
+      CancelDiscovery: async () => true,
+      GetAppearance: async () => { if(Reflect.get(window,'appearanceReadFails'))throw Error('read failed');return localStorage.getItem('test-native-appearance') || 'dark' },
+      SaveAppearance: async (mode:string) => { if(Reflect.get(window,'appearanceSaveFails'))throw Error('save failed');localStorage.setItem('test-native-appearance',mode) },
       GetDiscoveryPreferences: async () => ({groups:[]}),
       SaveDiscoveryPreferences: async () => {},
       GetSettings: async () => { state.reads++; return { ...state.settings } },
@@ -52,6 +57,66 @@ async function openSourceSettings(page: Page) {
   await mainNav(page).getByRole('button', { name:'设置', exact:true }).click()
   await categories(page).getByRole('link', { name:'音源', exact:true }).click()
 }
+
+test('appearance switches immediately, persists independently and follows live system changes',async({page})=>{
+ await mockBridge(page);await page.emulateMedia({colorScheme:'light'});await page.goto('/')
+ await expect(page.locator('html')).toHaveAttribute('data-theme','dark')
+ await mainNav(page).getByRole('button',{name:'设置',exact:true}).click()
+ await categories(page).getByRole('link',{name:'外观',exact:true}).click()
+ const mode=page.getByLabel('主题',{exact:true})
+ await mode.selectOption('light');await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+ await expect.poll(()=>page.evaluate(()=>localStorage.getItem('test-native-appearance'))).toBe('light')
+ expect(await page.evaluate(()=>Reflect.get(window,'testState').writes)).toEqual([])
+ const contrast=await page.locator('#appearance-mode-description').evaluate(element=>{
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const context=canvas.getContext('2d')!
+  function luminance(color:string){context.clearRect(0,0,1,1);context.fillStyle=color;context.fillRect(0,0,1,1);const rgb=[...context.getImageData(0,0,1,1).data].slice(0,3).map(value=>{const n=value/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4});return rgb[0]!*.2126+rgb[1]!*.7152+rgb[2]!*.0722}
+  const foreground=luminance(getComputedStyle(element).color),background=luminance(getComputedStyle(document.body).backgroundColor)
+  return (Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05)
+ })
+ expect(contrast).toBeGreaterThanOrEqual(4.5)
+ await page.screenshot({path:'test-results/appearance-light.png'})
+ await mode.selectOption('system');await page.emulateMedia({colorScheme:'dark'})
+ await expect(page.locator('html')).toHaveAttribute('data-theme','dark');await expect(mode).toHaveValue('system')
+ await page.emulateMedia({colorScheme:'light'});await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+ await mode.selectOption('dark');await page.emulateMedia({colorScheme:'light'})
+ await expect(page.locator('html')).toHaveAttribute('data-theme','dark')
+ await expect.poll(()=>page.evaluate(()=>localStorage.getItem('test-native-appearance'))).toBe('dark')
+ await page.screenshot({path:'test-results/appearance-dark.png'})
+ await mode.selectOption('light');await expect.poll(()=>page.evaluate(()=>localStorage.getItem('test-native-appearance'))).toBe('light')
+ await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+ await mainNav(page).getByRole('button',{name:'设置',exact:true}).click();await categories(page).getByRole('link',{name:'外观',exact:true}).click()
+ await expect(page.getByLabel('主题',{exact:true})).toHaveValue('light')
+ await page.setViewportSize({width:640,height:620});await page.screenshot({path:'test-results/appearance-light-compact.png'})
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(640)
+})
+
+test('appearance read failures retain the first-paint cache without silently saving defaults',async({page})=>{
+ await mockBridge(page)
+ await page.addInitScript(()=>{Reflect.set(window,'appearanceReadFails',true);localStorage.setItem('miaoyin-appearance-v1','light')})
+ await page.goto('/');await mainNav(page).getByRole('button',{name:'设置',exact:true}).click()
+ await categories(page).getByRole('link',{name:'外观',exact:true}).click()
+ await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+ await expect(page.getByLabel('主题',{exact:true})).toBeDisabled()
+ expect(await page.evaluate(()=>localStorage.getItem('test-native-appearance'))).toBeNull()
+ await page.evaluate(()=>Reflect.set(window,'appearanceReadFails',false))
+ await page.getByRole('button',{name:'重试读取外观'}).click()
+ await expect(page.getByLabel('主题',{exact:true})).toBeEnabled()
+ await expect(page.locator('html')).toHaveAttribute('data-theme','dark')
+ expect(await page.evaluate(()=>localStorage.getItem('test-native-appearance'))).toBeNull()
+})
+
+test('appearance save failure preserves preview and retry never overwrites other settings',async({page})=>{
+ await mockBridge(page);await page.goto('/');await mainNav(page).getByRole('button',{name:'设置',exact:true}).click()
+ await categories(page).getByRole('link',{name:'外观',exact:true}).click()
+ await page.evaluate(()=>Reflect.set(window,'appearanceSaveFails',true))
+ await page.getByLabel('主题',{exact:true}).selectOption('light')
+ await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+ await expect(page.getByRole('button',{name:'重试保存外观'})).toBeVisible()
+ expect(await page.evaluate(()=>Reflect.get(window,'testState').writes)).toEqual([])
+ await page.evaluate(()=>Reflect.set(window,'appearanceSaveFails',false));await page.getByRole('button',{name:'重试保存外观'}).click()
+ await expect.poll(()=>page.evaluate(()=>localStorage.getItem('test-native-appearance'))).toBe('light')
+ await expect(page.getByRole('button',{name:'重试保存外观'})).toHaveCount(0)
+})
 
 test('settings is lazy and renders all sections continuously without a page header', async ({ page }) => {
   const requests:string[]=[]
@@ -172,7 +237,7 @@ test('settings anchors also work in the compact fixed layout', async ({ page }) 
   await categories(page).getByRole('link', { name:'音源', exact:true }).click()
   await expect(categories(page).getByRole('link', { name:'音源', exact:true })).toHaveAttribute('aria-current', 'location')
   await page.locator('[data-content-scroll]').evaluate(element => element.scrollTo(0, 0))
-  await expect(categories(page).getByRole('link', { name:'播放', exact:true })).toHaveAttribute('aria-current', 'location')
+  await expect(categories(page).getByRole('link', { name:'外观', exact:true })).toHaveAttribute('aria-current', 'location')
 })
 
 test('setting rows place descriptions left and controls right, then stack on narrow windows', async ({ page }) => {

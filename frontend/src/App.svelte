@@ -13,6 +13,7 @@
   import { registerWindowLifecycle } from '$lib/window-lifecycle'
   import { initializeDownloads } from '$lib/downloads-state.svelte'
   import { initializeFavorites } from '$lib/favorites-state.svelte'
+  import { initializeAppearance,appearanceView } from '$lib/appearance-state.svelte'
 
   const queueLoader = () => import('$lib/components/layout/QueuePanel.svelte')
   const loaders = {
@@ -32,6 +33,7 @@
     pageSeen = page
   })
   onMount(() => {
+    const appearance=initializeAppearance()
     initializePlayer()
     initializeFavorites()
     initializeDownloads()
@@ -41,13 +43,13 @@
     const media = matchMedia('(prefers-reduced-motion: reduce)')
     const update = () => reduced = media.matches
     update(); media.addEventListener('change', update)
-    return () => { lifecycle();media.removeEventListener('change', update);window.removeEventListener('beforeunload',closing) }
+    return () => { appearance();lifecycle();media.removeEventListener('change', update);window.removeEventListener('beforeunload',closing) }
   })
 </script>
 
 <svelte:head><title>妙音娘子</title><meta name="description" content="专注音乐的本地播放器" /></svelte:head>
 
-<Toaster position="top-right" theme="dark" richColors />
+<Toaster position="top-right" theme={appearanceView.resolved} richColors />
 <div class="grid h-dvh grid-cols-[74px_1fr] grid-rows-[1fr_auto] md:grid-cols-[210px_1fr] md:grid-rows-[1fr_100px]">
   <AppSidebar />
   <main class="flex min-w-0 flex-col overflow-hidden">

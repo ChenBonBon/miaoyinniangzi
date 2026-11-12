@@ -89,6 +89,8 @@ async function setup(page: Page) {
               return value
             },
             CancelMusicDetail: async () => true,
+            GetAppearance: async () => localStorage.getItem('test-native-appearance') || 'dark',
+            SaveAppearance: async (mode:string) => {localStorage.setItem('test-native-appearance',mode)},
             GetDiscoveryPreferences: async () => { if(localStorage.getItem('layout-read-error'))throw Error('read failed');return JSON.parse(localStorage.getItem('discovery-layout') || '{"groups":[]}') },
             SaveDiscoveryPreferences: async (value: unknown) => { if(state.layoutMode==='error')throw Error('save failed');state.layoutWrites.push(value);localStorage.setItem('discovery-layout',JSON.stringify(value)) },
             GetDiscoverySnapshot: async (kind:string,id:number,period:string) => JSON.parse(localStorage.getItem('discovery-cache-fixture') || '{}')[`${kind}:${id}:${period}`] || {savedAt:0},
@@ -782,6 +784,18 @@ test('uncached discovery catalog failures are toasted rather than rendered as em
   await page.getByRole('button',{name:'刷新',exact:true}).click()
   await expect(page.getByRole('button',{name:'查看 榜单1',exact:true})).toBeVisible()
   await expect(notice).toHaveCount(0)
+})
+
+test('light appearance also applies to recommendation failure toasts',async({page})=>{
+ await setup(page)
+ await page.evaluate(()=>{localStorage.setItem('test-native-appearance','light');localStorage.setItem('discovery-fixture-mode','error')})
+ await page.reload()
+ await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+ await expect(page.locator('[data-sonner-toaster]')).toHaveAttribute('data-sonner-theme','light')
+ await expect(page.locator('[data-sonner-toast]').filter({hasText:'暂时无法读取推荐'})).toHaveCount(1)
+ await page.screenshot({path:'test-results/appearance-light-toast.png'})
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares)).toEqual([])
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').downloadEnqueues)).toBe(0)
 })
 
 test('fresh persisted recommendation catalog avoids an automatic QQ request but explicit refresh requests once', async ({page}) => {

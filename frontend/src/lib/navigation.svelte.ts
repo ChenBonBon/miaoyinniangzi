@@ -2,7 +2,7 @@ import { tick } from 'svelte'
 import { toast } from 'svelte-sonner'
 
 export type Page = '推荐' | '喜欢' | '搜索' | '下载' | '设置' | '正在播放' | '音乐详情'
-export type SettingsSection = '播放' | '下载' | '音源'
+export type SettingsSection = '外观' | '播放' | '下载' | '音源'
 export const navigation = $state({ page: '推荐' as Page, settingsSection: '播放' as SettingsSection, queueOpen: false })
 export const browsing = $state({ back: false, forward: false, restoring: false, refreshing: false })
 interface Entry { page: Page; data?: unknown; scroll?: number }

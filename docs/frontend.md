@@ -24,8 +24,10 @@ src/lib/components/layout/             主侧栏、常驻底部播放器
 src/lib/components/LazyPage.svelte      动态页面加载、骨架、错误与重试
 src/lib/components/settings/            共享设置控件
 src/lib/pages/                         推荐、搜索、下载、设置页面
-src/lib/pages/settings/                播放、下载、音源设置分类
+src/lib/pages/settings/                外观、播放、下载、音源设置分类
 src/lib/navigation.svelte.ts           导航和轻量页面状态
+src/lib/appearance-controller.ts      外观独立读取、串行保存与失败重试
+src/lib/appearance-state.svelte.ts    配色、系统偏好监听与首屏缓存
 src/lib/settings-state.svelte.ts       应用级设置草稿与保存生命周期
 src/lib/settings-autosave.ts           无 UI 依赖的防抖和串行保存控制器
 src/lib/settings.ts                    Wails 设置桥接

@@ -45,7 +45,7 @@ python3 tools/prepare_libmpv_macos.py --arch arm64
 MIAOYIN_MPV_LIBRARY="$PWD/build/deps/libmpv/Frameworks/libmpv.2.dylib" wails dev
 ```
 
-构建：`CGO_CFLAGS='-mmacosx-version-min=13.0' CGO_LDFLAGS='-mmacosx-version-min=13.0' wails build`。生成的 go.sum 应纳入版本控制。跨平台改动也需 macOS 验收，自动测试、原生探针和完整应用手动验收的状态见 [macOS 验收](docs/macos-testing.md)。
+构建：`CGO_CFLAGS='-mmacosx-version-min=13.0' CGO_LDFLAGS='-mmacosx-version-min=13.0' wails build`。生成的 go.sum 应纳入版本控制。跨平台改动也需 macOS 验收，自动测试、原生探针和完整应用手动验收的状态见 [macOS 验收](docs/macos-testing.md)。设置现支持 [深色／浅色／跟随系统](docs/appearance.md)，新外观功能的原生验收独立记录。
 
 已升级 Wails 以解决旧版本绑定生成器与 Go 1.27 的兼容问题，并更新存在已知安全问题的传递依赖。不再使用 Go 1.25.3 临时工具链。
 

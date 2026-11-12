@@ -41,6 +41,8 @@ async function openSearch(page: Page) {
         localStorage.setItem('test-search-history','[]')
         return []
       },
+      GetAppearance: async () => localStorage.getItem('test-native-appearance') || 'dark',
+      SaveAppearance: async (mode:string) => {localStorage.setItem('test-native-appearance',mode)},
       GetDiscoveryPreferences: async () => ({groups:[]}),
       SaveDiscoveryPreferences: async () => {},
       SearchSongs:async (query:string,page:number,id:string) => {
