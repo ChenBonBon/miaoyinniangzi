@@ -18,7 +18,6 @@
   const queueLoader = () => import('$lib/components/layout/QueuePanel.svelte')
   const loaders = {
     音乐详情: () => import('$lib/pages/MusicDetailPage.svelte'),
-    专辑预览: () => import('$lib/pages/PreviewAlbumPage.svelte'),
     正在播放: () => import('$lib/pages/NowPlayingPage.svelte'),
     推荐: () => import('$lib/pages/DiscoverPage.svelte'),
     喜欢: () => import('$lib/pages/FavoritesPage.svelte'),

@@ -10,7 +10,9 @@
   import * as Empty from '$lib/components/ui/empty'
   import DownloadButton from '$lib/components/DownloadButton.svelte'
   import SongTable from '$lib/components/music/SongTable.svelte'
-  import ForYouPreview from '$lib/components/music/ForYouPreview.svelte'
+  import ForYou from '$lib/components/music/ForYou.svelte'
+  import {forYouController} from '$lib/for-you-state.svelte'
+  import {favoritesState} from '$lib/favorites-state.svelte'
   import CollectionCover from '$lib/components/music/CollectionCover.svelte'
   import { discoveryController, discoveryMemory, discoveryState as view } from '$lib/discovery-state.svelte'
   import { discoveryKey, type DiscoveryEntry } from '$lib/discovery-controller'
@@ -67,7 +69,7 @@
         if (scroll) scroll.scrollTop = view.selected ? discoveryMemory.collectionScroll : discoveryMemory.catalogScroll[view.kind]
         restoring = false
       },
-      refresh: () => discoveryController.refresh(),
+      refresh: async () => {await Promise.all([discoveryController.refresh(),...(!view.selected&&favoritesState.status==='ready'&&favoritesState.songs.length?[forYouController.activate(true)]:[])])},
     })
     return () => { disposed = true; binding.dispose(); scroll?.removeEventListener('scroll', listener); discoveryController.suspend() }
   })
@@ -107,7 +109,7 @@
     <div class="mb-6 flex flex-wrap items-center gap-3"><Button disabled={view.status !== 'ready' || !songs.length} onclick={() => playerController.playFrom(songs, 0)}><Play data-icon="inline-start" />播放全部</Button><DownloadButton songs={view.status === 'ready' ? songs : []} label="下载全部" /></div>
   {:else}
     <div class="mb-8 flex items-start justify-between gap-4"><div><span class="text-sm text-muted-foreground">今天，听点什么？</span><h1 class="mt-3 mb-4 text-3xl font-semibold tracking-tight md:text-4xl">把时间交给音乐。</h1><p class="text-sm leading-7 text-muted-foreground">从新歌到榜单，发现下一首喜欢的歌。</p></div><Button id="discovery-adjust" variant="outline" size="sm" disabled={adjustLoading || preferences.status !== 'ready' || !view.catalog?.entries.length} onclick={adjust}><SlidersHorizontal data-icon="inline-start" />调整</Button></div>
-    <ForYouPreview />
+    <ForYou />
     {#if preferences.error}<Alert.Root variant="destructive" class="mb-6"><Alert.Title>{preferences.error}</Alert.Title><Button variant="outline" size="sm" class="mt-2" onclick={() => preferencesController.retry()}>{preferences.status === 'error' ? '重试读取布局' : '重试保存布局'}</Button></Alert.Root>{/if}
   {/if}
 

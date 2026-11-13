@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 async function setup(page: Page) {
+  await page.route('https://y.gtimg.cn/**',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><rect width="240" height="240" fill="#354658"/><circle cx="120" cy="120" r="70" fill="#233241"/></svg>'}))
   await page.addInitScript(() => {
     const audios: HTMLAudioElement[] = []
     const OriginalAudio = window.Audio
@@ -42,6 +43,7 @@ async function setup(page: Page) {
       creditRequests: [] as string[],
       testSongs: songs,
       artistTrackCount: 2,
+      forYouMode:'normal', forYouCalls:0, forYouCancels:[] as string[], forYouPending:[] as (()=>void)[],
       detailMode: 'normal',
       detailRequests: [] as string[],
       detailPending: [] as (()=>void)[],
@@ -89,6 +91,15 @@ async function setup(page: Page) {
               return value
             },
             CancelMusicDetail: async () => true,
+            GetForYou: async () => {
+              state.forYouCalls++
+              const favorites=JSON.parse(localStorage.getItem('favorite-songs')||'[]')
+              if(state.forYouMode==='error')throw Error('无法获取猜你喜欢，请重试')
+              const value={songs:favorites.length?Array.from({length:36},(_,index)=>({...songs[0],id:`Similar${index}`,songId:String(1000+index),title:`相似歌曲${index}`,artist:`推荐歌手${index%6}`,artists:[{id:`Artist${index%6}`,name:`推荐歌手${index%6}`}],albumMid:`Album${index}`,album:`推荐专辑${index}`,coverUrl:`https://y.gtimg.cn/music/photo_new/T002R300x300M000Album${index}.jpg`})):[],reason:favorites.length?'ready':'no_favorites',seedCount:favorites.length?1:0,skipped:0,warning:''}
+              if(state.forYouMode==='pending')return new Promise(resolve=>state.forYouPending.push(()=>resolve(value)))
+              return value
+            },
+            CancelForYou: async (id:string) => {state.forYouCancels.push(id);return true},
             GetAppearance: async () => localStorage.getItem('test-native-appearance') || 'dark',
             SaveAppearance: async (mode:string) => {localStorage.setItem('test-native-appearance',mode)},
             GetDiscoveryPreferences: async () => { if(localStorage.getItem('layout-read-error'))throw Error('read failed');return JSON.parse(localStorage.getItem('discovery-layout') || '{"groups":[]}') },
@@ -717,32 +728,35 @@ test('late detail replies cannot undo navigation or replace another entity', asy
   expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares)).toEqual([])
 })
 
-test('static for-you has twelve responsive tiles with independent play and local album navigation',async({page})=>{
+test('personalized for-you batches play real candidates and open real albums without background media work',async({page})=>{
  await setup(page)
+ await page.evaluate(()=>localStorage.setItem('favorite-songs',JSON.stringify([Reflect.get(window,'playerTest').testSongs[0]])))
+ await page.reload()
  const section=page.getByRole('region',{name:'猜你喜欢',exact:true}),rows=section.getByRole('listitem')
  await expect(rows).toHaveCount(12)
  await expect(section.getByRole('table')).toHaveCount(0)
  await expect(section.getByRole('button',{name:/下一首|收藏/})).toHaveCount(0)
  expect(await section.getByRole('list').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(4)
  expect(await section.getByRole('list').evaluate(element=>getComputedStyle(element).gridTemplateRows.split(' ').length)).toBe(3)
- await expect.poll(()=>rows.locator('img').evaluateAll(images=>images.every(image=>(image as HTMLImageElement).naturalWidth>0))).toBe(true)
- const titles=()=>rows.locator('[data-preview-title]').allTextContents()
+ await expect.poll(()=>rows.locator('img').evaluateAll(images=>images.length===12&&images.every(image=>(image as HTMLImageElement).naturalWidth>0))).toBe(true)
+ const titles=()=>rows.locator('[data-for-you-title]').allTextContents()
  const initial=await titles();expect(new Set(initial).size).toBe(12)
- expect(initial.every(value=>Number(value)>=1&&Number(value)<=50)).toBe(true)
+ expect(initial.every(value=>value.startsWith('相似歌曲'))).toBe(true)
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares)).toEqual([])
  const above=await section.evaluate(element=>{const chart=document.querySelector('[data-discovery-group]');return !!chart&&element.getBoundingClientRect().top<chart.getBoundingClientRect().top})
  expect(above).toBe(true)
  const calls=await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryCalls.length)
  const first=rows.first(),title=initial[0]
  await first.getByRole('button',{name:`播放 ${title}`,exact:true}).click()
- await expect(page.getByText('静态预览，暂不播放音乐',{exact:true})).toBeVisible()
+ await expect(footer(page).getByRole('button',{name:'暂停',exact:true})).toBeVisible()
  await expect(section).toBeVisible()
- await expect(page.locator('[data-preview-album]')).toHaveCount(0)
- await first.getByRole('button',{name:`查看专辑 ${title}`,exact:true}).click()
- await expect(page.getByRole('heading',{name:`专辑 ${title}`,exact:true})).toBeVisible()
- await expect(page.getByRole('table',{name:'专辑预览曲目'})).toContainText(`歌手 ${title}`)
+ await expect(page.locator('[data-music-detail]')).toHaveCount(0)
+ await first.getByRole('button',{name:/查看专辑/}).click()
+ await expect(page.getByRole('heading',{name:'测试专辑',exact:true})).toBeVisible()
+ await expect(page.locator('[data-music-detail="album"]')).toContainText('专辑曲目0')
  await expect(section).toHaveCount(0)
- await page.screenshot({path:'test-results/for-you-album-preview.png'})
- await page.getByRole('button',{name:'返回推荐',exact:true}).click()
+ await page.screenshot({path:'test-results/for-you-album.png'})
+ await page.getByRole('button',{name:'后退',exact:true}).click()
  await expect(rows).toHaveCount(12);expect(await titles()).toEqual(initial)
  const replace=section.getByRole('button',{name:'换一批',exact:true})
  await replace.focus();await replace.press('Enter')
@@ -750,26 +764,48 @@ test('static for-you has twelve responsive tiles with independent play and local
  await expect(section.getByRole('button',{name:'换一批',exact:true})).toBeFocused()
  expect(await page.evaluate(()=>Reflect.get(window,'playerTest').discoveryCalls.length)).toBe(calls)
  expect(await page.evaluate(()=>Reflect.get(window,'playerTest').favoriteWrites)).toEqual([])
- expect(await page.evaluate(()=>Reflect.get(window,'playerTest').detailRequests)).toEqual([])
- expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares)).toEqual([])
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').detailRequests.length)).toBe(1)
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares.length)).toBe(1)
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').forYouCalls)).toBe(1)
  expect(await page.evaluate(()=>Reflect.get(window,'playerTest').downloadEnqueues)).toBe(0)
  const batch=await titles()
- await page.screenshot({path:'test-results/for-you-static.png'})
+ await page.screenshot({path:'test-results/for-you-real.png'})
  await page.setViewportSize({width:640,height:620})
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(640)
  expect(await section.getByRole('list').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(3)
  expect(await section.getByRole('list').evaluate(element=>getComputedStyle(element).gridTemplateRows.split(' ').length)).toBe(4)
  expect(await titles()).toEqual(batch)
- await page.screenshot({path:'test-results/for-you-static-compact.png'})
+ await page.screenshot({path:'test-results/for-you-real-compact.png'})
  await page.setViewportSize({width:1440,height:900})
  await expect.poll(()=>section.getByRole('list').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(4)
  expect(await titles()).toEqual(batch)
  await page.setViewportSize({width:640,height:620})
  await page.evaluate(()=>localStorage.setItem('test-native-appearance','light'));await page.reload()
  await expect(page.locator('html')).toHaveAttribute('data-theme','light')
- await page.screenshot({path:'test-results/for-you-static-light-compact.png'})
+ await page.screenshot({path:'test-results/for-you-real-light-compact.png'})
  await page.getByRole('button',{name:'查看 榜单1',exact:true}).click()
  await expect(section).toHaveCount(0)
+})
+
+test('for-you empty favorites never fall back to static songs and late replies cannot undo chart navigation',async({page})=>{
+ await setup(page)
+ const section=page.getByRole('region',{name:'猜你喜欢',exact:true})
+ await expect(section.getByText('从喜欢的歌开始',{exact:true})).toBeVisible()
+ await expect(section.getByRole('listitem')).toHaveCount(0)
+ await page.evaluate(()=>{localStorage.setItem('favorite-songs',JSON.stringify([Reflect.get(window,'playerTest').testSongs[0]]))})
+ await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'喜欢',exact:true}).click()
+ await page.getByRole('button',{name:'刷新',exact:true}).click()
+ await page.evaluate(()=>Reflect.get(window,'playerTest').forYouMode='pending')
+ await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'推荐',exact:true}).click()
+ await expect.poll(()=>page.evaluate(()=>Reflect.get(window,'playerTest').forYouPending.length)).toBe(1)
+ await page.getByRole('button',{name:'查看 榜单1',exact:true}).click()
+ await expect.poll(()=>page.evaluate(()=>Reflect.get(window,'playerTest').forYouCancels.length)).toBeGreaterThan(0)
+ await page.evaluate(()=>{Reflect.get(window,'playerTest').forYouPending.splice(0).forEach((finish:()=>void)=>finish());Reflect.get(window,'playerTest').forYouMode='normal'})
+ await expect(page.getByRole('heading',{name:'榜单1',exact:true})).toBeVisible()
+ await expect(section).toHaveCount(0)
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').prepares)).toEqual([])
+ await page.getByRole('button',{name:'返回推荐',exact:true}).click()
+ await expect(section.getByRole('listitem')).toHaveCount(12)
 })
 
 test('persisted recommendations remain usable after reload and failed catalog or collection refresh', async ({page}) => {

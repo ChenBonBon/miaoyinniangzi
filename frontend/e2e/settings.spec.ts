@@ -37,6 +37,9 @@ async function mockBridge(page: Page) {
         state.sources = state.sources.map(source => ({ ...source, active:false }))
         return [...state.sources]
       },
+      GetFavorites: async () => [], AddFavorite:async()=>{}, RemoveFavorite:async()=>{},
+      GetForYou: async () => ({songs:[],reason:'no_favorites',seedCount:0,skipped:0,warning:''}),
+      CancelForYou: async () => true,
       GetDiscoveryCatalog: async () => ({kind:'chart',entries:[]}),
       GetDiscoveryCollection: async () => {throw Error('no fixture collection')},
       CancelDiscovery: async () => true,

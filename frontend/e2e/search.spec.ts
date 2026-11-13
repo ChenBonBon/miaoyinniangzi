@@ -41,6 +41,9 @@ async function openSearch(page: Page) {
         localStorage.setItem('test-search-history','[]')
         return []
       },
+      GetFavorites: async () => [], AddFavorite:async()=>{}, RemoveFavorite:async()=>{},
+      GetForYou: async () => ({songs:[],reason:'no_favorites',seedCount:0,skipped:0,warning:''}),
+      CancelForYou: async () => true,
       GetAppearance: async () => localStorage.getItem('test-native-appearance') || 'dark',
       SaveAppearance: async (mode:string) => {localStorage.setItem('test-native-appearance',mode)},
       GetDiscoveryPreferences: async () => ({groups:[]}),
