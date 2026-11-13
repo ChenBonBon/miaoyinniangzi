@@ -50,6 +50,12 @@ type App struct {
 	detailCancel       context.CancelFunc
 	detailID           string
 	detailSequence     uint64
+	similar            music.SimilarReader
+	forYouMu           sync.Mutex
+	forYouCache        map[string]forYouCached
+	forYouCancel       context.CancelFunc
+	forYouID           string
+	forYouSequence     uint64
 	discovery          music.DiscoveryReader
 	discoveryCancel    context.CancelFunc
 	discoveryID        string
@@ -154,7 +160,7 @@ func openApp() (*App, error) {
 		return nil, err
 	}
 	qq := music.NewQQClient().WithDiagnostics(music.NewDiagnostics(filepath.Join(config, "妙音娘子", "logs")))
-	app := &App{store: store, sources: sources.New(store, sources.NewSystemKeys(filepath.Join(config, "妙音娘子")), inspector), music: qq, discovery: qq, details: qq, suggestions: qq, lyrics: qq, playDiagnostics: playbackdiag.New(filepath.Join(config, "妙音娘子", "logs"))}
+	app := &App{store: store, sources: sources.New(store, sources.NewSystemKeys(filepath.Join(config, "妙音娘子")), inspector), music: qq, similar: qq, discovery: qq, details: qq, suggestions: qq, lyrics: qq, playDiagnostics: playbackdiag.New(filepath.Join(config, "妙音娘子", "logs"))}
 	// A damaged download record must not prevent playback or access to settings.
 	// The download page reports an unavailable service without resetting data.
 	_ = app.initDownloads()
