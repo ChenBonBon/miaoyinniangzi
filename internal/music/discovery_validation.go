@@ -25,11 +25,16 @@ func ValidDiscoveryCatalogValue(value DiscoveryCatalog) bool {
 	return true
 }
 func ValidDiscoveryCollectionValue(value DiscoveryCollection) bool {
-	if !validCachedDiscoveryEntry(value.Entry) || value.Songs == nil || len(value.Songs) > MaxDiscoverySongs {
+	return validCachedDiscoveryEntry(value.Entry) && ValidSongs(value.Songs)
+}
+
+// ValidSongs validates bounded QQ metadata without granting playback authority.
+func ValidSongs(songs []Song) bool {
+	if songs == nil || len(songs) > MaxDiscoverySongs {
 		return false
 	}
 	seen := map[string]bool{}
-	for _, song := range value.Songs {
+	for _, song := range songs {
 		if song.Source != "tx" || !safeID(song.ID) || seen[song.ID] || song.Title == "" || !validDiscoveryText(song.Title, 512) || !validDiscoveryText(song.Subtitle, 512) || !validDiscoveryText(song.Artist, 8448) || !validDiscoveryText(song.Album, 512) || len(song.Artists) > 32 || len(song.AvailableQualities) > 3 || math.IsNaN(song.Duration) || math.IsInf(song.Duration, 0) || song.Duration < 0 || song.Duration > 86400 || (song.CoverURL != "" && discoveryCover(song.CoverURL) != song.CoverURL) {
 			return false
 		}

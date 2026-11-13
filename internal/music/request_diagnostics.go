@@ -47,6 +47,8 @@ func requestRoute(module, method string) string {
 		return "chart_page"
 	case module == "newsong.NewSongServer" && method == "get_new_song_info":
 		return "new_songs"
+	case module == "music.recommend.TrackRelationServer" && method == "GetSimilarSongs":
+		return "similar_songs"
 	default:
 		return "other"
 	}
@@ -66,7 +68,7 @@ func sanitizeTiming(value *requestTiming) *requestTiming {
 	copy := *value
 	copy.Stage = timingStage(copy.Stage)
 	switch copy.Route {
-	case "chart_catalog", "chart_page", "new_songs", "other":
+	case "chart_catalog", "chart_page", "new_songs", "similar_songs", "other":
 	default:
 		copy.Route = "other"
 	}

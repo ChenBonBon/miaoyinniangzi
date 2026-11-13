@@ -61,7 +61,7 @@ func (d *Diagnostics) record(event diagnostic, started time.Time, err error) {
 	if d == nil {
 		return
 	}
-	if event.Operation != "search" && event.Operation != "suggestions" && event.Operation != "discovery_catalog" && event.Operation != "discovery_collection" && event.Operation != "artist_detail" && event.Operation != "artist_albums" && event.Operation != "album_detail" && event.Operation != "song_credits" {
+	if event.Operation != "search" && event.Operation != "suggestions" && event.Operation != "discovery_catalog" && event.Operation != "discovery_collection" && event.Operation != "artist_detail" && event.Operation != "artist_albums" && event.Operation != "album_detail" && event.Operation != "song_credits" && event.Operation != "similar_songs" {
 		return
 	}
 	event.Time = time.Now().UTC().Format(time.RFC3339Nano)
