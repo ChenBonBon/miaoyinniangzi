@@ -790,8 +790,9 @@ test('personalized for-you batches play real candidates and open real albums wit
 test('for-you empty favorites never fall back to static songs and late replies cannot undo chart navigation',async({page})=>{
  await setup(page)
  const section=page.getByRole('region',{name:'猜你喜欢',exact:true})
- await expect(section.getByText('从喜欢的歌开始',{exact:true})).toBeVisible()
- await expect(section.getByRole('listitem')).toHaveCount(0)
+ await expect(page.getByRole('button',{name:'查看 榜单1',exact:true})).toBeVisible()
+ await expect(section).toHaveCount(0)
+ expect(await page.evaluate(()=>Reflect.get(window,'playerTest').forYouCalls)).toBe(0)
  await page.evaluate(()=>{localStorage.setItem('favorite-songs',JSON.stringify([Reflect.get(window,'playerTest').testSongs[0]]))})
  await page.getByRole('navigation',{name:'主导航'}).getByRole('button',{name:'喜欢',exact:true}).click()
  await page.getByRole('button',{name:'刷新',exact:true}).click()
