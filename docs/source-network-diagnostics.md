@@ -24,4 +24,4 @@
 
 混合 lookup 额外按单个答案输出分类（reason=answer_group），仍无原始地址或关联标识。测试验证原合成/私网/看似公网答案都不拨号、仅拨号独立验证的回退结果，回退混入私网/合成地址整组拒绝，以及本机接口仍拒绝。
 
-显式 `MIAOYIN_LIVE_SOURCE_DNS=1` 同环境公共 DNS 测试已通过：mixed → fake_v4 + non_public → fallback public_v4 → 公网校验成功，地址数 1。只记录分类/计数，无用户源或媒体请求。Go 全量 race/vet 通过；真实个人源播放恢复需用户用新完整包确认，不能以 DNS 测试替代。
+显式 `MIAOYIN_LIVE_SOURCE_DNS=1` 同环境公共 DNS 测试已通过：mixed → fake_v4 + non_public → fallback public_v4 → 公网校验成功，地址数 1。只记录分类/计数，无用户源或媒体请求。Go 全量 race/vet 通过；用户随后使用完整包 `macos-network-fix-69fedab/妙音娘子.app`，保持 Clash 配置不变，确认正常播放、测试通过，记录为当前 macOS/个人源/代理配置下的完整包恢复验收。此结论不扩展为其他代理配置或 Windows 实机通过。
