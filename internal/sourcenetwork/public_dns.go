@@ -13,17 +13,23 @@ import (
 
 var fakeIPRange = netip.MustParsePrefix("198.18.0.0/15")
 
-func fakeIPAnswers(answers []net.IPAddr) bool {
-	if len(answers) == 0 {
-		return false
-	}
+// A known synthetic IPv4 answer triggers a fresh, independently validated
+// lookup of the hostname, never permission to use any original answer. TUN
+// resolvers may mix that IPv4 with synthetic/private IPv6. The entire original
+// set must be discarded, including apparently public addresses. Without a
+// known synthetic IPv4 marker the ordinary all-address rejection is unchanged.
+func needsPublicDNS(answers []net.IPAddr) bool {
+	found := false
 	for _, answer := range answers {
 		ip, ok := netip.AddrFromSlice(answer.IP)
-		if !ok || answer.Zone != "" || !fakeIPRange.Contains(ip.Unmap()) {
+		if !ok || answer.Zone != "" {
 			return false
 		}
+		if fakeIPRange.Contains(ip.Unmap()) {
+			found = true
+		}
 	}
-	return true
+	return found
 }
 
 // A TUN's synthetic addresses are never dialed. Bootstrap one fixed HTTPS DNS

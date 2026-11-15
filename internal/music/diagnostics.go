@@ -58,7 +58,7 @@ func (d *Diagnostics) RecordSourceNetwork(stage, answers, reason string) {
 		return
 	}
 	switch reason {
-	case "success", "begin", "lookup_failed", "local_inspection_failed", "local_interface", "non_public_or_zone", "invalid_url", "request_shape", "request_build", "headers", "redirect", "scheme", "credentials", "fragment", "port", "host":
+	case "success", "begin", "answer_group", "lookup_failed", "local_inspection_failed", "local_interface", "non_public_or_zone", "invalid_url", "request_shape", "request_build", "headers", "redirect", "scheme", "credentials", "fragment", "port", "host":
 	default:
 		return
 	}
@@ -66,7 +66,7 @@ func (d *Diagnostics) RecordSourceNetwork(stage, answers, reason string) {
 	switch reason {
 	case "lookup_failed":
 		err = ErrNetwork
-	case "success", "begin":
+	case "success", "begin", "answer_group":
 	default:
 		err = ErrRestricted
 	}

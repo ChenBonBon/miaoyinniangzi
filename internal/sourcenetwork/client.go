@@ -127,7 +127,12 @@ func (c *Client) addresses(ctx context.Context, host string) ([]net.IP, error) {
 		return nil, ErrNetwork
 	}
 	c.observation("lookup", ips, "success")
-	if fakeIPAnswers(ips) {
+	if classifyAnswers(ips) == "mixed" {
+		for _, answer := range ips {
+			c.observation("lookup", []net.IPAddr{answer}, "answer_group")
+		}
+	}
+	if needsPublicDNS(ips) {
 		ips, err = c.fallback(ctx, host)
 		if err != nil || len(ips) == 0 || len(ips) > 32 {
 			if errors.Is(err, ErrDenied) {
