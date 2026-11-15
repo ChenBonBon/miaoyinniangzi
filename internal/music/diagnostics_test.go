@@ -28,6 +28,22 @@ func readDiagnostic(t *testing.T, dir string) diagnostic {
 	}
 	return event
 }
+func TestSourceNetworkDiagnosticsRejectArbitraryStrings(t *testing.T) {
+	dir := t.TempDir()
+	d := NewDiagnostics(dir)
+	d.RecordSourceNetwork("lookup", "PRIVATE-HOST", "success")
+	d.RecordSourceNetwork("PRIVATE-STAGE", "mixed", "success")
+	d.RecordSourceNetwork("lookup", "mixed", "PRIVATE-ERROR")
+	if _, err := os.Stat(filepath.Join(dir, "qq-metadata.jsonl")); !os.IsNotExist(err) {
+		t.Fatal("arbitrary text reached disk")
+	}
+	d.RecordSourceNetwork("address_check", "fake_v6", "non_public_or_zone")
+	event := readDiagnostic(t, dir)
+	if event.Operation != "source_network" || event.Network == nil || event.Network.Answers != "fake_v6" || event.Result != "restricted" {
+		t.Fatal("fixed source observation missing")
+	}
+}
+
 func TestSearchDiagnosticsCodesAndPrivacy(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string

@@ -36,6 +36,7 @@ type Proxy interface {
 	ValidateMedia(context.Context, string) error
 }
 type Client struct {
+	observe    func(Observation)
 	http       *http.Client
 	media      *http.Client
 	lookup     func(context.Context, string) ([]net.IPAddr, error)
@@ -122,19 +123,29 @@ func validEndpointURL(raw string, media bool) (*url.URL, error) {
 func (c *Client) addresses(ctx context.Context, host string) ([]net.IP, error) {
 	ips, err := c.lookup(ctx, host)
 	if err != nil || len(ips) == 0 || len(ips) > 32 {
+		c.observation("lookup", nil, "lookup_failed")
 		return nil, ErrNetwork
 	}
+	c.observation("lookup", ips, "success")
 	if fakeIPAnswers(ips) {
 		ips, err = c.fallback(ctx, host)
 		if err != nil || len(ips) == 0 || len(ips) > 32 {
+			if errors.Is(err, ErrDenied) {
+				c.observation("fallback", nil, "non_public_or_zone")
+			} else {
+				c.observation("fallback", nil, "lookup_failed")
+			}
 			if errors.Is(err, ErrDenied) {
 				return nil, ErrDenied
 			}
 			return nil, ErrNetwork
 		}
+		c.observation("fallback", ips, "success")
 	}
+	c.observation("address_check", ips, "begin")
 	local, err := c.localAddrs()
 	if err != nil {
+		c.observation("address_check", nil, "local_inspection_failed")
 		return nil, ErrDenied
 	}
 	out := make([]net.IP, 0, len(ips))
@@ -148,19 +159,23 @@ func (c *Client) addresses(ctx context.Context, host string) ([]net.IP, error) {
 				localIP = v.IP
 			}
 			if localIP != nil && localIP.Equal(ip.IP) {
+				c.observation("address_check", ips, "local_interface")
 				return nil, ErrDenied
 			}
 		}
 		if ip.Zone != "" || !PublicIP(ip.IP) {
+			c.observation("address_check", ips, "non_public_or_zone")
 			return nil, ErrDenied
 		}
 		out = append(out, ip.IP)
 	}
+	c.observation("address_check", ips, "success")
 	return out, nil
 }
 func (c *Client) ValidateMedia(ctx context.Context, raw string) error {
 	u, err := validEndpointURL(raw, true)
 	if err != nil {
+		c.observation("media_url", nil, deniedURLReason(raw, true))
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -171,13 +186,16 @@ func (c *Client) ValidateMedia(ctx context.Context, raw string) error {
 func (c *Client) Do(ctx context.Context, input Request) (Response, error) {
 	u, err := validURL(input.URL)
 	if err != nil {
+		c.observation("request", nil, deniedURLReason(input.URL, false))
 		return Response{}, err
 	}
 	if input.Method != "GET" && input.Method != "POST" || len(input.Body) > 64*1024 || len(input.Headers) > 32 {
+		c.observation("request", nil, "request_shape")
 		return Response{}, ErrDenied
 	}
 	request, err := http.NewRequestWithContext(ctx, input.Method, u.String(), bytes.NewReader(input.Body))
 	if err != nil {
+		c.observation("request", nil, "request_build")
 		return Response{}, ErrDenied
 	}
 	total := 0
@@ -185,9 +203,11 @@ func (c *Client) Do(ctx context.Context, input Request) (Response, error) {
 		total += len(key) + len(value)
 		switch strings.ToLower(key) {
 		case "host", "cookie", "proxy-authorization", "proxy-connection", "connection", "transfer-encoding", "content-length", "accept-encoding", "upgrade", "trailer":
+			c.observation("request", nil, "headers")
 			return Response{}, ErrDenied
 		}
 		if len(key) > 128 || len(value) > 4096 || total > 16*1024 || strings.ContainsAny(key+value, "\r\n\x00") {
+			c.observation("request", nil, "headers")
 			return Response{}, ErrDenied
 		}
 		request.Header.Set(key, value)
@@ -204,6 +224,7 @@ func (c *Client) Do(ctx context.Context, input Request) (Response, error) {
 		return Response{}, ErrRestricted
 	}
 	if response.StatusCode >= 300 && response.StatusCode < 400 {
+		c.observation("request", nil, "redirect")
 		return Response{}, ErrDenied
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {

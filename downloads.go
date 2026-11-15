@@ -12,7 +12,7 @@ import (
 )
 
 func (a *App) initDownloads() error {
-	raw := sourcenetwork.New()
+	raw := sourcenetwork.New().WithObserver(a.networkObserver)
 	probe, err := mediastream.New(raw)
 	if err != nil {
 		return err

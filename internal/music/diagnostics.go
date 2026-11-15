@@ -13,19 +13,26 @@ const diagnosticLimit = 64 * 1024
 
 // Only fixed operation/result names and numeric protocol fields reach disk.
 // Never pass request URLs, headers, queries, bodies or raw error messages here.
+type sourceNetworkDiagnostic struct {
+	Stage   string `json:"stage"`
+	Answers string `json:"answers"`
+	Reason  string `json:"reason"`
+}
+
 type diagnostic struct {
-	Timing      *requestTiming `json:"timing,omitempty"`
-	Time        string         `json:"time"`
-	Operation   string         `json:"operation"`
-	DurationMS  int64          `json:"duration_ms"`
-	HTTPStatus  int            `json:"http_status,omitempty"`
-	Result      string         `json:"result"`
-	Code        *int           `json:"code,omitempty"`
-	RequestCode *int           `json:"request_code,omitempty"`
-	DataCode    *int           `json:"data_code,omitempty"`
-	MetaRet     *int           `json:"meta_ret,omitempty"`
-	Filter      *int           `json:"filter,omitempty"`
-	Subcode     *int           `json:"subcode,omitempty"`
+	Network     *sourceNetworkDiagnostic `json:"network,omitempty"`
+	Timing      *requestTiming           `json:"timing,omitempty"`
+	Time        string                   `json:"time"`
+	Operation   string                   `json:"operation"`
+	DurationMS  int64                    `json:"duration_ms"`
+	HTTPStatus  int                      `json:"http_status,omitempty"`
+	Result      string                   `json:"result"`
+	Code        *int                     `json:"code,omitempty"`
+	RequestCode *int                     `json:"request_code,omitempty"`
+	DataCode    *int                     `json:"data_code,omitempty"`
+	MetaRet     *int                     `json:"meta_ret,omitempty"`
+	Filter      *int                     `json:"filter,omitempty"`
+	Subcode     *int                     `json:"subcode,omitempty"`
 }
 
 type Diagnostics struct {
@@ -37,6 +44,34 @@ func NewDiagnostics(directory string) *Diagnostics { return &Diagnostics{directo
 
 // WithDiagnostics configures the client before its first request.
 func (c *QQClient) WithDiagnostics(d *Diagnostics) *QQClient { c.diagnostics = d; return c }
+
+// RecordSourceNetwork accepts fixed classifications only, never request data.
+func (d *Diagnostics) RecordSourceNetwork(stage, answers, reason string) {
+	switch stage {
+	case "request", "lookup", "fallback", "address_check", "media_url":
+	default:
+		return
+	}
+	switch answers {
+	case "none", "invalid", "zoned", "fake_v4", "fake_v6", "non_public", "public_v4", "public_v6", "mixed":
+	default:
+		return
+	}
+	switch reason {
+	case "success", "begin", "lookup_failed", "local_inspection_failed", "local_interface", "non_public_or_zone", "invalid_url", "request_shape", "request_build", "headers", "redirect", "scheme", "credentials", "fragment", "port", "host":
+	default:
+		return
+	}
+	var err error
+	switch reason {
+	case "lookup_failed":
+		err = ErrNetwork
+	case "success", "begin":
+	default:
+		err = ErrRestricted
+	}
+	d.record(diagnostic{Operation: "source_network", Network: &sourceNetworkDiagnostic{Stage: stage, Answers: answers, Reason: reason}}, time.Now(), err)
+}
 func diagnosticResult(err error) string {
 	switch {
 	case err == nil:
@@ -61,7 +96,7 @@ func (d *Diagnostics) record(event diagnostic, started time.Time, err error) {
 	if d == nil {
 		return
 	}
-	if event.Operation != "search" && event.Operation != "suggestions" && event.Operation != "discovery_catalog" && event.Operation != "discovery_collection" && event.Operation != "artist_detail" && event.Operation != "artist_albums" && event.Operation != "album_detail" && event.Operation != "song_credits" && event.Operation != "similar_songs" {
+	if event.Operation != "search" && event.Operation != "suggestions" && event.Operation != "discovery_catalog" && event.Operation != "discovery_collection" && event.Operation != "artist_detail" && event.Operation != "artist_albums" && event.Operation != "album_detail" && event.Operation != "song_credits" && event.Operation != "similar_songs" && event.Operation != "source_network" {
 		return
 	}
 	event.Time = time.Now().UTC().Format(time.RFC3339Nano)

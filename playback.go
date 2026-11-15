@@ -61,7 +61,7 @@ func (a *App) PrepareSong(song music.Song, requestID string, previous, next *mus
 		a.playCancel()
 	}
 	if a.media == nil {
-		raw := sourcenetwork.New()
+		raw := sourcenetwork.New().WithObserver(a.networkObserver)
 		var err error
 		a.media, err = mediastream.New(raw)
 		if err != nil {

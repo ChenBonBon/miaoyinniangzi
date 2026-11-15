@@ -15,6 +15,7 @@ func ValidRange(value string) bool {
 func (c *Client) dialPinned(ctx context.Context, address string, media bool) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil || (port != "443" && (!media || port != "80")) {
+		c.observation("request", nil, "invalid_url")
 		return nil, ErrDenied
 	}
 	ips, err := c.addresses(ctx, host)
@@ -38,6 +39,7 @@ func (c *Client) dialPinned(ctx context.Context, address string, media bool) (ne
 // are forwarded. The caller must bound bytes, duration and close the response.
 func (c *Client) OpenMedia(ctx context.Context, raw, method, byteRange string) (*http.Response, error) {
 	if method != "GET" && method != "HEAD" || !ValidRange(byteRange) {
+		c.observation("media_url", nil, "request_shape")
 		return nil, ErrDenied
 	}
 	// No whole-body Client.Timeout: playback has a separate bounded lifetime.
@@ -45,6 +47,7 @@ func (c *Client) OpenMedia(ctx context.Context, raw, method, byteRange string) (
 	for redirects := 0; redirects <= 3; redirects++ {
 		u, err := validEndpointURL(raw, true)
 		if err != nil {
+			c.observation("media_url", nil, deniedURLReason(raw, true))
 			return nil, err
 		}
 		request, err := http.NewRequestWithContext(ctx, method, u.String(), nil)

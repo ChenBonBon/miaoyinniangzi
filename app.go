@@ -16,6 +16,7 @@ import (
 	"miaoyinniangzi/internal/music"
 	"miaoyinniangzi/internal/playbackdiag"
 	"miaoyinniangzi/internal/songcache"
+	"miaoyinniangzi/internal/sourcenetwork"
 	"miaoyinniangzi/internal/sourceruntime"
 	"miaoyinniangzi/internal/sources"
 	"miaoyinniangzi/internal/storage"
@@ -50,6 +51,7 @@ type App struct {
 	detailCancel       context.CancelFunc
 	detailID           string
 	detailSequence     uint64
+	networkObserver    func(sourcenetwork.Observation)
 	similar            music.SimilarReader
 	forYouMu           sync.Mutex
 	forYouCache        map[string]forYouCached
@@ -159,8 +161,13 @@ func openApp() (*App, error) {
 		store.Close()
 		return nil, err
 	}
-	qq := music.NewQQClient().WithDiagnostics(music.NewDiagnostics(filepath.Join(config, "妙音娘子", "logs")))
-	app := &App{store: store, sources: sources.New(store, sources.NewSystemKeys(filepath.Join(config, "妙音娘子")), inspector), music: qq, similar: qq, discovery: qq, details: qq, suggestions: qq, lyrics: qq, playDiagnostics: playbackdiag.New(filepath.Join(config, "妙音娘子", "logs"))}
+	diagnostics := music.NewDiagnostics(filepath.Join(config, "妙音娘子", "logs"))
+	observer := func(event sourcenetwork.Observation) {
+		diagnostics.RecordSourceNetwork(event.Stage, event.Answers, event.Reason)
+	}
+	inspector.Network = sourcenetwork.New().WithObserver(observer)
+	qq := music.NewQQClient().WithDiagnostics(diagnostics)
+	app := &App{networkObserver: observer, store: store, sources: sources.New(store, sources.NewSystemKeys(filepath.Join(config, "妙音娘子")), inspector), music: qq, similar: qq, discovery: qq, details: qq, suggestions: qq, lyrics: qq, playDiagnostics: playbackdiag.New(filepath.Join(config, "妙音娘子", "logs"))}
 	// A damaged download record must not prevent playback or access to settings.
 	// The download page reports an unavailable service without resetting data.
 	_ = app.initDownloads()
